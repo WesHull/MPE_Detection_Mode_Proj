@@ -1,0 +1,31 @@
+﻿Treatment,Trial,Tot.Consumed,Tot.Consumed.Pred,Tot.Consumed.Pred.Day
+Rock crab absent,1,5,2.5,0.833333333
+Rock crab absent,2,10,5,1.666666667
+Rock crab absent,3,10,5,1.666666667
+Rock crab absent,4,10,5,1.666666667
+Rock crab absent,5,11,5.5,1.833333333
+Rock crab cue,1,16,8,2.666666667
+Rock crab cue,2,16,8,2.666666667
+Rock crab cue,3,21,10.5,3.5
+Rock crab cue,4,22,11,3.666666667
+Rock crab cue,5,22,11,3.666666667
+Rock crab present,1,0,0,0
+Rock crab present,2,0,0,0
+Rock crab present,3,1,0.5,0.166666667
+Rock crab present,4,3,1.5,0.5
+Rock crab present,5,0,0,0
+Pisaster absent,1,22,11,3.666666667
+Pisaster absent,2,58,29,9.666666667
+Pisaster absent,3,29,14.5,4.833333333
+Pisaster absent,4,26,13,4.333333333
+Pisaster absent,5,44,22,7.333333333
+Pisaster cue,1,45,22.5,7.5
+Pisaster cue,2,41,20.5,6.833333333
+Pisaster cue,3,40,20,6.666666667
+Pisaster cue,4,35,17.5,5.833333333
+Pisaster cue,5,40,20,6.666666667
+Pisaster present,1,26,13,8.666666667
+Pisaster present,2,9,4.5,3
+Pisaster present,3,39,19.5,13
+Pisaster present,4,25,12.5,8.333333333
+Pisaster present,5,19,9.5,6.333333333

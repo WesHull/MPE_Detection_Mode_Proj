@@ -1,0 +1,37 @@
+Plot,Orientation,Site,Count,Plot.Num,Orient.Num,Site.Num
+Black,Horizontal,Belinda Point,24,1,0,3
+Blue,Horizontal,Belinda Point,48,2,0,3
+Green,Horizontal,Belinda Point,72,3,0,3
+Orange,Horizontal,Belinda Point,20,4,0,3
+Pink,Horizontal,Belinda Point,32,5,0,3
+Yellow,Horizontal,Belinda Point,32,6,0,3
+Black,Vertical,Belinda Point,6,1,1,3
+Blue,Vertical,Belinda Point,40,2,1,3
+Green,Vertical,Belinda Point,108,3,1,3
+Orange,Vertical,Belinda Point,24,4,1,3
+Pink,Vertical,Belinda Point,32,5,1,3
+Yellow,Vertical,Belinda Point,20,6,1,3
+Black,Horizontal,Devil's Gate,104,1,0,2
+Blue,Horizontal,Devil's Gate,32,2,0,2
+Green,Horizontal,Devil's Gate,88,3,0,2
+Orange,Horizontal,Devil's Gate,32,4,0,2
+Pink,Horizontal,Devil's Gate,14,5,0,2
+Yellow,Horizontal,Devil's Gate,48,6,0,2
+Black,Vertical,Devil's Gate,32,1,1,2
+Blue,Vertical,Devil's Gate,20,2,1,2
+Green,Vertical,Devil's Gate,20,3,1,2
+Orange,Vertical,Devil's Gate,24,4,1,2
+Pink,Vertical,Devil's Gate,12,5,1,2
+Yellow,Vertical,Devil's Gate,10,6,1,2
+Black,Horizontal,Point St. George,832,1,0,1
+Blue,Horizontal,Point St. George,640,2,0,1
+Green,Horizontal,Point St. George,424,3,0,1
+Orange,Horizontal,Point St. George,496,4,0,1
+Pink,Horizontal,Point St. George,736,5,0,1
+Yellow,Horizontal,Point St. George,480,6,0,1
+Black,Vertical,Point St. George,352,1,1,1
+Blue,Vertical,Point St. George,752,2,1,1
+Green,Vertical,Point St. George,96,3,1,1
+Orange,Vertical,Point St. George,528,4,1,1
+Pink,Vertical,Point St. George,800,5,1,1
+Yellow,Vertical,Point St. George,280,6,1,1
