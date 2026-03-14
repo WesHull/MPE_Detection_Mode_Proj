@@ -1,0 +1,737 @@
+---
+title: "Untitled"
+author: "Wesley Hull"
+date: "3/8/2022"
+output: html_document
+---
+###############################
+# MPE Field Consumption Data
+# Wesley Hull
+# 06/6/2021
+###############################
+
+```{r}
+library(tidyverse)
+library(lattice)
+library(psych)
+library(nlme)
+library(lme4)
+library(gridExtra)
+library(Rmisc)
+library(cowplot)
+library(ggpubr)
+library(ggplot2)
+library(ggpmisc)
+library(grid)
+library(MASS)
+library(blmeco)
+library(car)
+library(AICcmodavg)
+library(fitdistrplus)
+library(glmmTMB)
+library(GGally)
+library(treemapify)
+```
+
+```{r}
+#load in the following data files
+  #Recruitment_data_for_R_2020
+  #Field_Density_Data_For_R_2019
+  #Field_Consumption_Data_2019
+  #Lab_Consumption_Data_2021
+  #Star_Behavior_2020
+
+setwd("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data")
+
+Recruitment_data_for_R_2020 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Recruitment data for R 2020.csv")
+Field_Consumption_Data_2019 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Field Consumption Data_2019.csv")
+Lab_Consumption_Data_2021 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Lab_Consumption_Data_2021.csv")
+Star_Behavior_2020 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Star_Behavior_2020.csv")
+Field_Density_Data_For_R_2019 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Field Density Data For R 2019.csv")
+
+#Calculating summary statistics
+Recruitment_data_for_R_2020$Rec.Tuff.Day<-Recruitment_data_for_R_2020$Count/104
+Recruitment_data_for_R_2020$Log.Rec.Day<-log(Recruitment_data_for_R_2020$Rec.Tuff.Day)
+head(Recruitment_data_for_R_2020)
+
+Dens.Sum<-summarySE(Field_Density_Data_For_R_2019, measurevar = "Density", groupvars = c("Predator","Site"))
+Dens.Sum$Site=factor(Dens.Sum$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+Dens.Sum$Predator=factor(Dens.Sum$Predator, levels = c("Sea star","Crab"), ordered = TRUE)
+
+
+Field.Sum<-summarySE(Field_Consumption_Data_2019, measurevar = "Proportion.Living", groupvars = c("Site","Treatment.C","Treatment.S","Group"))
+head(Field.Sum)
+
+LN.Sum<-summarySE(Field_Consumption_Data_2019, measurevar = "LN.Rate.Survival.Day", groupvars = c("Site","Treatment.C","Treatment.S","Group"))
+head(LN.Sum)
+
+PerCap.Int<-summarySE(Field_Consumption_Data_2019, measurevar = "Per.Cap.Int.Str", groupvars = c("Site","Treatments.All"))
+head(PerCap.Int)
+
+Pop.Int<-summarySE(Field_Consumption_Data_2019, measurevar = "Pop.Int.Str", groupvars = c("Site","Treatments.All"))
+head(Pop.Int)
+
+Lab_Consumption_Data_2021<-summarySE(Lab_Consumption_Data_2021, measurevar = "Tot.Consumed.Pred.Day", groupvars = c("Treatment"))
+head(Lab_Consumption_Data_2021)
+```
+
+##########################################################################
+##
+##    FIGURES
+##
+##########################################################################
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+display.brewer.all(colorblindFriendly = T)
+
+
+My_Theme = theme(
+  axis.title.x = element_text(size = 30,colour = "black"),
+  axis.text.x = element_text(size = 30,colour = "black"),
+  axis.title.y = element_text(size = 30,colour = "black"),
+  axis.text.y = element_text(size = 30,colour = "black"),
+  legend.title = element_blank(),
+  legend.text = element_text(size = 30, colour = "black"),
+  title = element_text(size = 30, color = "black"))
+
+
+
+###################################
+# Recruitment figure
+###################################
+
+
+
+Recruitment_data_for_R_2020$Site=factor(Recruitment_data_for_R_2020$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+
+Rec<-ggplot(Recruitment_data_for_R_2020, aes(x=`Site`, y = `Rec.Tuff.Day`, fill = `Orientation`))+
+  geom_boxplot(colour = "black", shape = 19, size = 1.0)+
+  scale_y_continuous(breaks=seq(0.0,9.5,1.5),limits = c(0.0,9.5))+
+  scale_fill_brewer(palette = "Dark2")+
+  labs(x="", fill ="Orientation")+
+  ylab(expression(paste("Mussels � ",collector^-1," � ",day^-1,"", sep = "")))+
+  theme_classic()+
+  border(size = 1.3)+
+  theme(axis.ticks = element_line(size = 1.0), legend.position = c(.86,.93))+
+  My_Theme
+Rec
+
+ggsave("Rec.Fig.png", width = 12, height = 10, units = c("in"), dpi = 600)
+
+
+###############################
+# Figure Field Density
+###############################
+
+Den<-ggplot(Dens.Sum, aes(x=Site, y = Density, fill = Predator))+
+  #geom_bar(stat = "summary",fun = "mean", color = "black", size = 1, position = position_dodge())+
+  geom_errorbar(aes(ymin=Density-se, ymax=Density+se), width =0,size = 0.8, position = position_dodge(0.25))+
+  geom_point(size = 7, shape = 21, position = position_dodge(0.25))+
+  scale_fill_brewer(palette = "Dark2", labels = c(expression(italic(Pisaster),"Rock crabs")))+
+  labs(x="", fill ="Predators")+
+  scale_y_continuous(expand = c(0,0), breaks=seq(0.0,0.3,0.1,),limits = c(0.0,0.3))+
+  ylab(expression(paste("Individuals � ", m^-2, sep = "")))+
+  theme_classic()+
+  border(size = 1.3)+
+  theme(axis.ticks = element_line(size = 1.0), legend.position = c(.86,.94))+
+  My_Theme
+Den
+
+ggsave("Density.Fig.png", width = 12, height = 12, units = c("in"), dpi = 600)
+
+###############################
+# Figure Proportion Survival
+###############################
+My_Theme = theme(
+  axis.title.x = element_text(size = 30,colour = "black"),
+  axis.text.x = element_text(size = 30,colour = "white"),
+  axis.title.y = element_text(size = 30,colour = "black"),
+  axis.text.y = element_text(size = 30,colour = "black"),
+  legend.title = element_blank(),
+  legend.text = element_text(size = 30, colour = "black"),
+  title = element_text(size = 30, color = "black"))
+
+
+Field.Sum$Site=factor(Field.Sum$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+
+
+#Subset data
+
+PSG<-Field.Sum[9:12,]
+DG<-Field.Sum[5:8,]
+BP<-Field.Sum[1:4,]
+
+
+PSG.Fig<-ggplot(data = PSG, 
+                aes(x=`Treatment.S`, 
+                                y=`Proportion.Living`, 
+                                group = `Treatment.C`,
+                     fill = `Treatment.C`))+
+  geom_errorbar(aes(ymin=Proportion.Living-se, ymax=Proportion.Living+se),
+                color = "black", 
+                width =0,size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, 
+            color = "black")+
+  geom_point(aes(color = Treatment.C), 
+             size=5,
+             shape=21,
+             color = "black",
+             stroke = 1)+
+  scale_fill_brewer(palette = "Dark2")+
+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
+                     limits = c(0.0,1.0))+
+  labs(x="",
+       y="Proportion of live mussels", 
+       group = "Predator", 
+       fill = "")+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle("Point St. George")+
+  theme(title = element_text(size = 20, 
+                             color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "top",
+        legend.text = element_text(color = "black",
+                                   size = 16),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,
+                                  size = 22),
+        axis.text.x = element_text(color = "white"),
+        axis.title.y = element_text(),
+        axis.text.y = element_text(color = "black", size = 16),
+        axis.title.y.left = element_text(color = "black",
+                                         size = 18))
+  
+PSG.Fig
+
+ggsave("PSG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+DG.Fig<-ggplot(data = DG, 
+               aes(x=`Treatment.S`, 
+                   y=`Proportion.Living`, 
+                   group = `Treatment.C`))+
+  scale_color_brewer(palette = "Dark2")+
+  geom_errorbar(aes(ymin=Proportion.Living-se, 
+                    ymax=Proportion.Living+se),
+                color = "black", 
+                width =0,
+                size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, 
+            color = "black")+
+  geom_point(aes(color = Treatment.C), 
+             size=4,
+             shape=19, 
+             stroke = 1.5)+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
+                     limits = c(0.0,1.0))+
+  labs(x="",
+       y="Proportion of Live Mussels", 
+       group = "Predator")+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle("Devil's Gate")+
+  theme(title = element_text(size = 20, 
+                             color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "top",
+        legend.text = element_text(color = "black",
+                                   size = 16),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,
+                                  size = 22),
+        axis.text.x = element_text(color = "white"),
+        axis.title.y = element_text(),
+        axis.text.y = element_text(color = "white", size = 16),
+        axis.title.y.left = element_text(color = "white",
+                                         size = 18))
+
+
+DG.Fig
+
+ggsave("DG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+
+BP.Fig<-ggplot(data = BP, 
+               aes(x=`Treatment.S`, 
+                   y=`Proportion.Living`, 
+                   group = `Treatment.C`))+
+  scale_color_brewer(palette = "Dark2")+
+  geom_errorbar(aes(ymin=Proportion.Living-se, 
+                    ymax=Proportion.Living+se),
+                color = "black", 
+                width =0,
+                size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, color = "black")+
+  geom_point(aes(color = Treatment.C),
+             size=4,
+             shape=19, 
+             stroke = 1.5)+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
+                     limits = c(0.0,1.0))+
+  labs(x="",
+       y="Proportion of Live Mussels", 
+       group = "Predator")+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle("Belinda Point")+
+  theme(title = element_text(size = 20, 
+                             color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "top",
+        legend.text = element_text(color = "black",
+                                   size = 16),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,
+                                  size = 22),
+        axis.text.x = element_text(color = "white"),
+        axis.title.y = element_text(),
+        axis.text.y = element_text(color = "white", size = 16),
+        axis.title.y.left = element_text(color = "white",
+                                         size = 18))
+
+
+BP.Fig
+
+ggsave("BP.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+ggarrange(PSG.Fig,DG.Fig,BP.Fig, common.legend = TRUE, ncol = 3, nrow = 1)
+
+
+###############################
+# Figure Proportion Survival
+###############################
+My_Theme = theme(
+  axis.title.x = element_text(size = 30,colour = "black"),
+  axis.text.x = element_text(size = 30,colour = "black"),
+  axis.title.y = element_text(size = 30,colour = "black"),
+  axis.text.y = element_text(size = 30,colour = "black"),
+  legend.title = element_blank(),
+  legend.text = element_text(size = 30, colour = "black"),
+  title = element_text(size = 30, color = "black"))
+
+
+LN.Sum$Site=factor(LN.Sum$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+
+
+#Subset data
+
+LN.PSG<-LN.Sum[9:12,]
+LN.DG<-LN.Sum[5:8,]
+LN.BP<-LN.Sum[1:4,]
+
+LN.PSG.Fig<-ggplot(data = LN.PSG, 
+                   aes(x=`Treatment.S`, 
+                       y=`LN.Rate.Survival.Day`, 
+                       group = `Treatment.C`))+
+  scale_color_brewer(palette = "Dark2")+
+  geom_errorbar(aes(ymin=LN.Rate.Survival.Day-se, 
+                    ymax=LN.Rate.Survival.Day+se),
+                color = "black", 
+                width =0,
+                size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, 
+            color = "black")+
+  geom_point(aes(color = Treatment.C), 
+             size=4,
+             shape=19, 
+             stroke = 1.5)+ 
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(-0.2,0.0,0.1,),
+                     limits = c(-0.2,0.0))+
+  labs(x="",
+       y=expression(paste("Ln(Mussel Survival · ", Day^-1, sep = ")")), 
+       group = "Predator")+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle("")+
+  theme(title = element_text(size = 20, 
+                             color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "top",
+        legend.text = element_text(color = "black",
+                                   size = 16),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,
+                                  size = 22),
+        axis.text.x = element_text(color = "black",
+                                   size = 16),
+        axis.text.y = element_text(color = "black", size = 16),
+        axis.title.y.left = element_text(color = "black",
+                                         size = 18))
+
+LN.PSG.Fig
+
+ggsave("PSG.LN.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+
+LN.DG.Fig<-ggplot(data = LN.DG, 
+                  aes(x=`Treatment.S`, 
+                      y=`LN.Rate.Survival.Day`, 
+                      group = `Treatment.C`))+
+  scale_color_brewer(palette = "Dark2")+
+  geom_errorbar(aes(ymin=LN.Rate.Survival.Day-se, 
+                    ymax=LN.Rate.Survival.Day+se),
+                color = "black", 
+                width =0,
+                size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, 
+            color = "black")+
+  geom_point(aes(color = Treatment.C), 
+             size=4,shape=19, 
+             stroke = 1.5)+ 
+  scale_y_continuous(breaks=seq(-0.2,0.0,0.1,),
+                     limits = c(-0.2,0.0))+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  labs(x="",
+       y=expression(paste("Ln(Mussel Survival · ", Day^-1, sep = ")")), 
+       group = "Predator")+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle("")+
+  theme(title = element_text(size = 20, 
+                             color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "top",
+        legend.text = element_text(color = "black",
+                                   size = 16),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,
+                                  size = 22),
+        axis.text.x = element_text(color = "black",
+                                   size = 16),
+        axis.text.y = element_text(color = "white", size = 16),
+        axis.title.y.left = element_text(color = "white",
+                                         size = 18))
+LN.DG.Fig
+
+ggsave("LN.DG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+
+LN.BP.Fig<-ggplot(data = LN.BP, 
+                  aes(x=`Treatment.S`, 
+                      y=`LN.Rate.Survival.Day`, 
+                      group = `Treatment.C`))+
+  scale_color_brewer(palette = "Dark2")+
+  geom_errorbar(aes(ymin=LN.Rate.Survival.Day-se, 
+                    ymax=LN.Rate.Survival.Day+se),
+                color = "black", 
+                width =0,
+                size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, 
+            color = "black")+
+  geom_point(aes(color = Treatment.C), 
+             size=4,
+             shape=19, 
+             stroke = 1.5)+ 
+  scale_y_continuous(breaks=seq(-0.2,0.0,0.1,),
+                     limits = c(-0.2,0.0))+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  labs(x="",
+       y=expression(paste("Ln(Mussel Survival · ", Day^-1, sep = ")")),
+       group = "Predator")+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle("")+
+  theme(title = element_text(size = 20, 
+                             color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "top",
+        legend.text = element_text(color = "black",
+                                   size = 16),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,
+                                  size = 22),
+        axis.text.x = element_text(color = "black",
+                                   size = 16),
+        axis.text.y = element_text(color = "white", size = 16),
+        axis.title.y.left = element_text(color = "white",
+                                         size = 18))
+
+LN.BP.Fig
+
+ggsave("BP.LN.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+
+Survival.fig<-ggarrange(PSG.Fig,
+                        DG.Fig,
+                        BP.Fig,
+                        LN.PSG.Fig,
+                        LN.DG.Fig,
+                        LN.BP.Fig, 
+          common.legend = TRUE,
+          align = "hv",
+          ncol = 3,
+          nrow = 2,
+          labels = c("A", "", "","B","",""),
+          font.label = list(size = 18))
+Survival.fig
+
+font.label = list(size = 16, color = "red")
+
+ggsave("Survival.fig.pdf", 
+       height = 14, 
+       width = 26, units = c("in"), dpi = 600)
+
+
+
+###############################
+# Figure Per capita survival
+###############################
+
+PerCap.Int$Site=factor(PerCap.Int$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+PerCap.Int<-PerCap.Int[-c(1,5,9),]
+
+PerCap.PSG<-PerCap.Int[7:9,]
+PerCap.DG<-PerCap.Int[4:6,]
+PerCap.BP<-PerCap.Int[1:3,]
+
+
+My_Theme = theme(
+  axis.title.x = element_text(size = 40,colour = "black"),
+  axis.text.x = element_text(size = 40,colour = "black"),
+  axis.title.y = element_text(size = 40,colour = "black"),
+  axis.text.y = element_text(size = 40,colour = "black"),
+  legend.title = element_blank(),
+  legend.text = element_text(size = 40, colour = "black"),
+  title = element_text(size = 40, color = "black"))
+
+PerCap.Int$Int.Treatment<-factor(PerCap.Int$Treatments.All, levels = c("Pisaster","Rock crabs","Pisaster + Rock crabs"))
+
+
+PerCap.Fig<-ggplot(PerCap.Int, aes(x=Site, y = Per.Cap.Int.Str, fill = Int.Treatment))+
+  geom_bar(stat = "summary",fun = "mean", color = "black", size = 1, position = position_dodge())+
+  geom_errorbar(aes(ymin=Per.Cap.Int.Str-se, ymax=Per.Cap.Int.Str+se), width =.3,size = 0.8, position = position_dodge(0.9))+
+  scale_fill_brewer(palette = "Dark2")+
+  labs(x="", fill ="Treatment", tag = "B)")+
+  scale_y_continuous(expand = c(0,0), breaks=seq(0.0,0.8,0.2,),limits = c(0.0,0.8))+
+  ylab("Per Capita Interaction Strength")+
+  theme_classic()+
+  border(size = 1.3)+
+  theme(axis.ticks = element_line(size = 1.0),
+        legend.position = "none",
+        axis.line = element_line(size = .5),
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)))+
+  My_Theme
+PerCap.Fig
+
+ggsave("PerCap.Fig.png", height = 11, width = 16, units = c("in"), dpi = 600)
+
+###############################
+# Figure Per Pop survival
+###############################
+
+Pop.Int$Site=factor(Pop.Int$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+Pop.Int<-Pop.Int[-c(1,5,9),]
+
+Pop.Int$Int.Treatment<-factor(Pop.Int$Treatments.All, levels = c("Pisaster","Rock crabs","Pisaster + Rock crabs"))
+
+My_Theme = theme(
+  axis.title.x = element_text(size = 40,colour = "black"),
+  axis.text.x = element_text(size = 40,colour = "white"),
+  axis.title.y = element_text(size = 40,colour = "black"),
+  axis.text.y = element_text(size = 40,colour = "black"),
+  legend.title = element_blank(),
+  legend.text = element_text(size = 40, colour = "black"),
+  title = element_text(size = 40, color = "black"))
+
+Pop.Fig<-ggplot(Pop.Int, aes(x=Site, y = Pop.Int.Str, fill = Int.Treatment))+
+  geom_bar(stat = "summary",fun = "mean", color = "black", size = 1, position = position_dodge())+
+  geom_errorbar(aes(ymin=Pop.Int.Str-se, ymax=Pop.Int.Str+se), width =.3,size = 0.8, position = position_dodge(0.9))+
+  scale_fill_brewer(palette = "Dark2", labels = expression(italic(Pisaster),"Rock crabs",italic(Pisaster)~"+ Rock crabs"))+
+  labs(x="", fill ="Treatment", tag = "A)")+
+  scale_y_continuous(expand = c(0,0),breaks=seq(0.0,0.16,0.04,),limits = c(0.0,0.16))+
+  ylab("Per Popultation Interaction Strength")+
+  theme_classic()+
+  border(size = 1.3)+
+  theme(axis.ticks = element_line(size = 1.0),
+        legend.position = "none",
+        axis.line = element_line(size = .5),
+        legend.spacing.x = unit(1.0, 'cm'))+
+  My_Theme
+Pop.Fig
+
+ggsave("Pop.Fig.png", height = 11, width = 16, units = c("in"), dpi = 600)
+
+
+
+Int.Str<-ggarrange(Pop.Fig,PerCap.Fig, 
+          common.legend = TRUE,
+          ncol = 1, nrow = 2)
+ggsave("Int.Str.png", height = 22, width = 18, units = c("in"), dpi = 600)
+
+###############################
+# Figure Lab Consumption
+###############################
+
+
+Star.Lab.Con<-Lab_Consumption_Data_2021[4:6,]
+Crab.Lab.Con<-Lab_Consumption_Data_2021[1:3,]
+
+Star.Lab.Fig<-ggplot(Star.Lab.Con, aes(x=Treatment, y = Tot.Consumed.Pred.Day))+
+  geom_bar(stat = "summary",fun = "mean", color = "black", fill = "white", size = 1, position = position_dodge())+
+  geom_errorbar(aes(ymin=Tot.Consumed.Pred.Day-se, ymax=Tot.Consumed.Pred.Day+se), width =.3,size = 0.8, position = position_dodge(0.9))+
+  scale_fill_brewer(palette = "Dark2")+
+  labs(x="", fill ="Treatment",tag = "A)")+
+  scale_y_continuous(expand = c(0,0),breaks=seq(0.0,10.0,2.0,),limits = c(0.0,10.0))+
+  ylab(expression(paste("Mussels Consumed · ", Individual^-1," · ",Day^-1,"", sep = "")))+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle(expression(italic(Pisaster)))+
+  theme(title = element_text(size = 18, color = "black"), axis.ticks = element_line(size = 1.0), legend.position = c(.91,.90),plot.title = element_text(hjust = 0.5))+
+  My_Theme
+Star.Lab.Fig
+
+ggsave("Star.Lab.png", height = 13, width = 18, units = c("in"), dpi = 600)
+
+
+Crab.Lab.Fig<-ggplot(Crab.Lab.Con, aes(x=Treatment, y = Tot.Consumed.Pred.Day))+
+  geom_bar(stat = "summary",fun = "mean", color = "black", fill = "white",  size = 1, position = position_dodge())+
+  geom_errorbar(aes(ymin=Tot.Consumed.Pred.Day-se, ymax=Tot.Consumed.Pred.Day+se), width =.3,size = 0.8, position = position_dodge(0.9))+
+  scale_fill_brewer(palette = "Dark2")+
+  scale_x_discrete(labels = expression(italic(Pisaster)~"absent",italic(Pisaster)~"cue",italic(Pisaster)~"present"))+
+  ylab(expression(paste("Mussels Consumed · ", Individual^-1," · ",Day^-1,"", sep = "")))+
+  labs(x="", fill ="Treatment", tag = "B)")+
+  scale_y_continuous(expand = c(0,0),breaks=seq(0.0,10.0,2.0,),limits = c(0.0,10.0))+
+  theme_classic()+
+  border(size = 1.3)+
+  ggtitle("Rock crabs")+
+  theme(title = element_text(size = 18, color = "black"), axis.ticks = element_line(size = 1.0), legend.position = c(.91,.90),plot.title = element_text(hjust = 0.5))+
+  My_Theme
+Crab.Lab.Fig<-Crab.Lab.Fig+theme(axis.title.y = element_text(colour = "black"),axis.text.y = element_text(colour = "black"))
+Crab.Lab.Fig
+
+ggsave("Crab.Lab.png", height = 13, width = 18, units = c("in"), dpi = 600)
+
+
+ggarrange(Star.Lab.Fig,Crab.Lab.Fig, 
+          common.legend = TRUE, 
+          ncol = 1, nrow = 2)
+
+ggsave("Lab.Crab.Star.Feeding.png", height = 29, width = 18, units = c("in"), dpi = 600)
+
+#############################################
+# Figure Star Behavior
+#############################################
+
+Star.Counts<-count(Star_Behavior_2020, vars = c("Treatment","Behavior"))
+Star.Counts<-as.data.frame(Star.Counts)
+
+  
+  ###################
+  # Rock crab absent
+  ###################
+
+    Star.crab.abs<-Star.Counts[1:4,]
+    Star.crab.abs$Percents<-(Star.crab.abs$freq/92)*100
+    Star.crab.abs
+    Percentz<-signif(Star.crab.abs$Percents,3)
+    Star.crab.abs$Round<-Percentz
+    
+    Fake3<-data.frame("Rock crab present","On mussels, not feeding",0, 0, 0)
+    names(Fake3)<-c("Treatment", "Behavior","freq","Percents","Round")
+    Star.crab.abs<-rbind(Star.crab.abs,Fake3)
+ 
+    
+    S.C.A<-ggplot(Star.crab.abs, aes(area = freq, fill = Behavior, label = Round))+
+      geom_treemap(color = 'black', size = 3)+
+      geom_treemap_text(
+        colour = "white",
+        place = "centre",
+        size = 26,)+
+      labs(tag = "A)",fill = "")+
+      ggtitle("Rock crab absent")+
+      theme(title = element_text(size = 20, color = "black"),plot.title = element_text(hjust = 0.5),legend.text = element_text(size = 18))+
+      scale_fill_brewer(palette = "Dark2")
+    S.C.A
+  
+  
+  ##################
+  # Rock crab cue
+  ##################
+    Star.crab.cue<-Star.Counts[5:8,]
+    Star.crab.cue$Percents<-(Star.crab.cue$freq/106)*100
+    Star.crab.cue
+    Percentz<-signif(Star.crab.cue$Percents,3)
+    Star.crab.cue$Round<-Percentz
+    
+    Fake4<-data.frame("Rock crab present","Roaming",0, 0, 0)
+    names(Fake4)<-c("Treatment", "Behavior","freq","Percents","Round")
+    Star.crab.cue<-rbind(Star.crab.cue,Fake4)
+    
+    S.C.C.<-ggplot(Star.crab.cue, aes(area = freq, fill = Behavior, label = Round))+
+      geom_treemap(color = 'black', size = 3)+
+      geom_treemap_text(
+        colour = "white",
+        place = "centre",
+        size = 26,)+
+      labs(tag = "B)",fill = "")+
+      ggtitle("Rock crab cue present")+
+      theme(title = element_text(size = 20, color = "black"),plot.title = element_text(hjust = 0.5),legend.text = element_text(size = 18))+
+      scale_fill_brewer(palette = "Dark2")
+    S.C.C.
+    
+  ###################
+  # Rock crab present
+  ###################
+    Star.crab.pres<-Star.Counts[9:12,]
+    Star.crab.pres$Percents<-(Star.crab.pres$freq/37)*100
+    Star.crab.pres
+    Percentz<-signif(Star.crab.pres$Percents,3)
+    Star.crab.pres$Round<-Percentz
+    
+    
+    Fake1<-data.frame("Rock crab present","Away, feeding",0, 0.0, 0.0)
+    Fake2<-data.frame("Rock crab present","On mussels, feeding",0, 0.0, 0.0)
+    
+    names(Fake1)<-c("Treatment", "Behavior","freq","Percents","Round")
+    names(Fake2)<-c("Treatment", "Behavior","freq","Percents","Round")
+    Star.crab.pres<-rbind(Star.crab.pres,Fake1)
+    Star.crab.pres<-rbind(Star.crab.pres,Fake2)
+    Star.crab.pres<-Star.crab.pres[-c(1),]
+    
+    S.C.P.<-ggplot(Star.crab.pres, aes(area = freq, fill = Behavior, label = Round))+
+      geom_treemap(color = 'black', size = 3)+
+      geom_treemap_text(
+        colour = "white",
+        place = "centre",
+        size = 26,)+
+      labs(tag = "C)",fill = "")+
+      ggtitle("Rock crab present")+
+      theme(title = element_text(size = 20, color = "black"),plot.title = element_text(hjust = 0.5),legend.text = element_text(size = 18))+
+      scale_fill_brewer(palette = "Dark2")
+    S.C.P.
+    
+    ggarrange(S.C.A,S.C.C.,S.C.P., 
+              common.legend = TRUE, 
+              ncol = 1, nrow = 3)
+
+
+    ggsave("Lab.Star.Behavior.png", height = 16, width = 13, units = c("in"), dpi = 600)
+```    
+    
+    
+  
+    

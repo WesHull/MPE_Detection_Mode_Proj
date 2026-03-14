@@ -1,0 +1,248 @@
+---
+title: "MPE Manuscript Analysis 2021"
+author: "Wesley Hull"
+date: "11/7/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+```{r, echo=FALSE}
+# Packages
+
+library(lattice)
+library(psych)
+library(nlme)
+library(lme4)
+
+library(Rmisc)
+library(cowplot)
+library(ggpubr)
+
+library(grid)
+library(MASS)
+library(blmeco)
+library(car)
+library(AICcmodavg)
+library(fitdistrplus)
+
+library(dplyr)
+library(MuMIn)
+library(lsmeans)
+```
+
+## Data Files Needed in Analysis 
+
+  Recruitment data for R 2020  
+  
+  Field Density Data for R 2019
+  
+  Mussel.Survival.Data
+  
+  Pisaster.Measurements.All.2015
+  
+  Crab.Measurements.All.2015
+  
+```{r, echo=FALSE}
+Recruitment_data_for_R_2020 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Recruitment data for R 2020.csv")
+Field_Density_Data_For_R_2019 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Field Density Data for R 2019.csv")
+Mussel_Survival_Data <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Mussel.Survival.Data.csv")
+Pisaster_Measurements_All_2015 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Pisaster.Measurements.All.2015.csv")
+Crab_Meausrements_All_2015 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Crab.Meausrements.All.2015.csv")
+```
+# RECRUITMENT ANALYSIS 
+ Goals
+    1) Determine if mussel recruitment differs across our field sites.
+    2) Determine if mussel recruitment differs between horizontal low and vertical high surfaces
+```{r, echo = TRUE}
+# New column dividing recruit count by days in the field
+  Recruitment_data_for_R_2020$Rec.Tuff.Day<-Recruitment_data_for_R_2020$Count/104
+  Recruitment_data_for_R_2020$Log.Rec.Day<-log(Recruitment_data_for_R_2020$Rec.Tuff.Day)
+  
+  head(Recruitment_data_for_R_2020)
+
+# Full model
+  Mod1<-lm(Recruitment_data_for_R_2020$Log.Rec.Day~Recruitment_data_for_R_2020$Orientation*Recruitment_data_for_R_2020$Site)
+  summary(Mod1)
+
+# ANOVA
+  Mod1.aov<-aov(Mod1)
+  summary(Mod1.aov)     # Interaction is not significant, so remove it and re-run model
+
+# New model with/out interaction
+  Mod2<-lm(Recruitment_data_for_R_2020$Log.Rec.Day~Recruitment_data_for_R_2020$Orientation+Recruitment_data_for_R_2020$Site)
+  summary(Mod2)
+
+# New ANOVA
+  Mod2.aov<-aov(Mod2)
+  summary(Mod2.aov)     #Significant effect of site and orientation
+                        #Run Tukeys to determine differences between sites
+
+# Tukeys
+  TukeyHSD(Mod2.aov)
+        # Findings
+          # Overall significant difference in recruitment between vertical and horizontal surfaces
+          # Significantly more recruitment at Point St. George than Devil's Gate and Belinda Point
+          # No difference in recruitment between Devil's Gate and Belinda Point
+```
+
+# DENSITY ANALYSIS 
+ Goals:
+    1) Determine if predator density differs across our field sites.
+    2) Determine if predator density differs at each site
+```{r, echo=TRUE}
+# New column with log transformed Density data 
+  Field_Density_Data_For_R_2019$Log.Density<-log(Field_Density_Data_For_R_2019$Density)
+  head(Field_Density_Data_For_R_2019)
+  
+# Full Model
+  Density.lm<-lm(Field_Density_Data_For_R_2019$Log.Density~Field_Density_Data_For_R_2019$Predator*Field_Density_Data_For_R_2019$Site)
+  summary(Density.lm)
+
+# ANOVA
+  Density.aov<-aov(Density.lm)
+  summary(Density.aov)      # Interaction is not significant, re-run without interaction
+
+# New model with/out interaction
+  Density.lm2<-lm(Field_Density_Data_For_R_2019$Log.Density~Field_Density_Data_For_R_2019$Predator+Field_Density_Data_For_R_2019$Site)
+  summary(Density.lm2)      
+
+# New ANOVA
+  Density.aov2<-aov(Density.lm2)
+  summary(Density.aov2)     # Significant effect of predator type and site
+
+# Tukey's
+  TukeyHSD(Density.aov2)    
+          # Findings
+              # Overall significant difference in seastar and crab abundance
+              # Point St. George Had the highest predator density followed by Devil's Gate and Belinda Point
+
+```
+  
+# MUSSEL SURVIVAL ANALYSES 
+### Proportion of Living 
+```{r, echo=TRUE}
+# Random affect is nested: blocks are repeated within sites, so code should be (1|Block:Site) or (1|Site:Block).
+    
+# With random intercept
+    Mod1<-lmer(Proportion.Living~Treatment.S*Treatment.C*Site+(1|Site:Block), data = Mussel_Survival_Data)
+    summary(Mod1)       #Variation from block is extremely low
+    
+# Without random intercept
+    Mod2<-lm(Proportion.Living~Treatment.S*Treatment.C*Site,data = Mussel_Survival_Data)
+    summary(Mod2)
+      
+# Likelihood ratio test
+    anova(Mod1,Mod2)    # No difference between models, 
+                        # Drop effect of block from model
+    
+# Model Selection
+    
+  # full
+    Full.lm<-lm(Proportion.Living~Treatment.S*Treatment.C*Site, data = Mussel_Survival_Data)
+      
+# model comparison function
+    options(na.action=na.fail)
+    
+    dredge(Full.lm)   # Full model is the best model
+      
+# Model summary/anova
+    summary(Full.lm)
+    anova(Full.lm)      # Run pairwise comparisons
+    
+# Pairwise comparisons
+    lsmeans(Full.lm, pairwise ~ Site*Treatment.C*Treatment.S, adjust = "tukey")
+  
+```
+### Natural Log Mussel Survival per Day 
+```{r, echo=TRUE}
+# Random effect assessment
+# Random affect is nested: blocks are repeated within sites, so code should be (1|Block:Site) or (1|Site:Block).
+      
+# With random intercept
+    Mod3<-lmer(LN.Rate.Survival.Day~Treatment.S*Treatment.C*Site+(1|Site:Block), data = Mussel_Survival_Data)
+    summary(Mod3)       # Seems that the variation from block is extremely low
+      
+# Without random intercept
+    Mod4<-lm(LN.Rate.Survival.Day~Treatment.S*Treatment.C*Site,data = Mussel_Survival_Data)
+    summary(Mod4)
+      
+# Likelihood ratio test
+    anova(Mod3,Mod4)    # No difference between models, so drop effect of block from model
+      
+# Model Selection
+  
+# full
+    Full.LN.lm<-lm(LN.Rate.Survival.Day~Treatment.S*Treatment.C*Site, data = Mussel_Survival_Data)
+      
+# model selection
+    options(na.action=na.fail)
+      
+    dredge(Full.LN.lm)   # Full model is the best model
+      
+# Model summary/anova
+    summary(Full.LN.lm)
+    anova(Full.LN.lm)  
+    
+# Pairwise comparisons
+    lsmeans(Full.lm, pairwise ~ Site*Treatment.C*Treatment.S, adjust = "tukey")
+```
+  
+# INTERACTION STRENGTH ANALYSIS 
+### Per Population Interaction Strength 
+```{r, echo=TRUE}
+# Remove control treatments    
+  Mussel.Survival<-Mussel_Survival_Data[-c(19,20,21,22,23,24,43,44,45,46,47,48,67,68,69,70,71,72),]
+
+# Full Model
+    Full.PerCap.glm<-glm(Mussel.Survival$Per.Cap.Int.Str~Mussel.Survival$Treatments.All*Mussel.Survival$Site, family = gaussian())
+    summary(Full.PerCap.glm)
+    
+# ANOVA
+    Full.PerCap.aov<-aov(Full.PerCap.glm)
+    summary(Full.PerCap.aov)      # Interaction is significant
+    
+# Tukey's 
+    TukeyHSD(Full.PerCap.aov)
+
+```
+
+### Per Capita Interaction Strength 
+```{r, echo=TRUE}    
+# Full Model
+    Full.Pop.lm<-lm(Mussel.Survival$Pop.Int.Str~Mussel.Survival$Treatments.All*Mussel.Survival$Site)
+    summary(Full.Pop.lm)
+    
+# ANOVA
+    Full.Pop.aov<-aov(Full.Pop.lm)
+    summary(Full.Pop.aov)      # Interaction is significant
+    
+# Tukey's 
+    TukeyHSD(Full.Pop.aov) 
+```
+    
+# SUPPLEMENTAL ANALYSIS 
+```{r, echo=TRUE}
+# ANOVA
+# Sea star
+  Rad<-lm(`Star Radius`~ Site, data = Pisaster_Measurements_All_2015)
+  summary(Rad)
+  Rad.aov<-aov(Rad)
+  summary(Rad.aov)
+  
+# Crabs
+  CP<-lm(`Carapace Width (mm)` ~ Site, data = Crab_Meausrements_All_2015)  
+  summary(CP)
+  CP.aov<-aov(CP)
+  summary(CP.aov)  
+  
+  par(mfrow = c(2,2))
+  plot(Rad.aov)   #violates assumptions, run kruskal wallis
+  plot(CP.aov)    #violates assumptions, run kruskal wallis
+    
+# Kruskal wallis
+  NP<-kruskal.test(Pisaster_Measurements_All_2015$Site ,Pisaster_Measurements_All_2015$`Star Radius`)
+  NP  
+  CP<-kruskal.test(Crab_Meausrements_All_2015$Site,Crab_Meausrements_All_2015$`Carapace Width (mm)`)
+  CP
+```  
