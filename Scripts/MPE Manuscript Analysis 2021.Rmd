@@ -9,26 +9,20 @@ output:
 ---
 ```{r, echo=FALSE}
 # Packages
-
-library(lattice)
-library(psych)
-library(nlme)
-library(lme4)
-
+library(tidyverse)
+library(plyr)
 library(Rmisc)
-library(cowplot)
+library(ggplot2)
+library(RColorBrewer)
+library(patchwork)
 library(ggpubr)
-
-library(grid)
-library(MASS)
-library(blmeco)
-library(car)
-library(AICcmodavg)
-library(fitdistrplus)
-
-library(dplyr)
+library(glmmTMB)
+library(DHARMa)
 library(MuMIn)
+library(lme4)
 library(lsmeans)
+library(car)
+library(cowplot)
 ```
 
 ## Data Files Needed in Analysis 
@@ -44,11 +38,11 @@ library(lsmeans)
   Crab.Measurements.All.2015
   
 ```{r, echo=FALSE}
-Recruitment_data_for_R_2020 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Recruitment data for R 2020.csv")
-Field_Density_Data_For_R_2019 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Field Density Data for R 2019.csv")
-Mussel_Survival_Data <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Mussel.Survival.Data.csv")
-Pisaster_Measurements_All_2015 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Pisaster.Measurements.All.2015.csv")
-Crab_Meausrements_All_2015 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Crab.Meausrements.All.2015.csv")
+Recruitment_data_for_R_2020 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Recruitment%20data%20for%20R%202020.csv")
+Field_Density_Data_For_R_2019 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Field%20Density%20Data%20For%20R%202019.csv")
+Mussel_Survival_Data <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Mussel.Survival.Data.csv")
+Pisaster_Measurements_All_2015 <-read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Pisaster.Measurements.All.2015.csv")
+Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Crab.Meausrements.All.2015.csv")
 ```
 # RECRUITMENT ANALYSIS 
  Goals
@@ -154,6 +148,7 @@ Crab_Meausrements_All_2015 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE 
     lsmeans(Full.lm, pairwise ~ Site*Treatment.C*Treatment.S, adjust = "tukey")
   
 ```
+
 ### Natural Log Mussel Survival per Day 
 ```{r, echo=TRUE}
 # Random effect assessment
@@ -190,6 +185,7 @@ Crab_Meausrements_All_2015 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE 
   
 # INTERACTION STRENGTH ANALYSIS 
 ### Per Population Interaction Strength 
+#### How much does the entire predator population at a site reduce mussel survival?
 ```{r, echo=TRUE}
 # Remove control treatments    
   Mussel.Survival<-Mussel_Survival_Data[-c(19,20,21,22,23,24,43,44,45,46,47,48,67,68,69,70,71,72),]
@@ -246,3 +242,294 @@ Crab_Meausrements_All_2015 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE 
   CP<-kruskal.test(Crab_Meausrements_All_2015$Site,Crab_Meausrements_All_2015$`Carapace Width (mm)`)
   CP
 ```  
+
+
+
+
+
+
+```{r}
+###############################################
+# potential analysis that includes 100 survival
+###############################################
+
+# Binomial analysis of mussel survival
+
+  #Total mussel check
+  Mussel_Survival_Data$total <- Mussel_Survival_Data$Survived+Mussel_Survival_Data$Consumed
+  
+  
+  # Step 1: construct full model
+  mod_full <- glmmTMB(
+    cbind(Survived, 30 - Survived) ~ Site * Treatment.C * Treatment.S +
+      (1 | Site:Block),
+    family = binomial,
+    data = Mussel_Survival_Data
+  )
+  
+  summary(mod_full)
+  
+  # make updated models that are reducing
+  mod2 <- update(mod_full, . ~ . - Site:Treatment.C:Treatment.S)
+  mod3 <- update(mod2, . ~ . - Site:Treatment.S)
+  mod4 <- update(mod3, . ~ . - Site:Treatment.C)
+  
+  
+  anova(mod_full, mod2, mod3, mod4)
+  
+    # full vs mod2: 3-way interaction can be removed
+    # mod2 vs mod3: no meaningful improvement
+    # mod3 vs mod4: some 2-way interactions are strongly supported
+  
+  Anova(mod2, type = "II")
+  
+    # assumptions
+      sim1 <- simulateResiduals(surv.mod1)
+      plot(sim1)
+      
+  # significant terms
+      # site
+      # crab treatment
+      # site x crab interaction
+      
+  # Post-Hoc    
+  surv_emm <- emmeans(mod2, pairwise ~ Treatment.C | Site, type = "response"); surv_emm    
+      
+
+```
+
+# Per captia and population intraction strengths
+```{r}
+# PPIS = total population level impact of each predator type per site
+  # PPIS = PPIS=(effect of predator on survival(effect size))×(predator abundance)
+    # effect size  =  survival in the respective absent treatment - the survival in the predator treatment
+
+library(dplyr)
+library(emmeans)
+
+# -------------------------------------------------
+# 1. PREDATOR DENSITY (SITE LEVEL)
+# -------------------------------------------------
+
+pred_site <- dplyr::group_by(Field_Density_Data_For_R_2019, Site, Predator) %>%
+  dplyr::summarise(
+    mean_density = mean(Density, na.rm = TRUE),
+    sd_density   = sd(Density, na.rm = TRUE),
+    n_transects  = dplyr::n(),
+    se_density   = sd_density / sqrt(n_transects),
+    .groups = "drop"
+  )
+
+crab_density <- pred_site %>% dplyr::filter(Predator == "Crab")
+star_density <- pred_site %>% dplyr::filter(Predator == "Sea star")
+
+both_density <- dplyr::group_by(Field_Density_Data_For_R_2019, Site) %>%
+  dplyr::summarise(
+    combined_density = sum(Density, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# -------------------------------------------------
+# 2. MARGINAL MEANS (FULL FACTORIAL MODEL)
+# -------------------------------------------------
+
+emm_df <- emmeans(
+  mod2,
+  ~ Treatment.C * Treatment.S | Site,
+  type = "response"
+) %>%
+  as.data.frame()
+
+# -------------------------------------------------
+# 3. EXTRACT 2x2 TREATMENT STRUCTURE
+# -------------------------------------------------
+
+baseline  <- emm_df %>% dplyr::filter(Treatment.C == "Absent",  Treatment.S == "Absent")
+crab_only <- emm_df %>% dplyr::filter(Treatment.C == "Present", Treatment.S == "Absent")
+star_only <- emm_df %>% dplyr::filter(Treatment.C == "Absent",  Treatment.S == "Present")
+both      <- emm_df %>% dplyr::filter(Treatment.C == "Present", Treatment.S == "Present")
+
+# -------------------------------------------------
+# 4. EFFECT SIZES (DELTA SURVIVAL)
+# -------------------------------------------------
+
+# Crab effect (averaged over sea star context)
+deltaS_crab <- data.frame(
+  Site = baseline$Site,
+  delta = (baseline$prob - crab_only$prob + star_only$prob - both$prob) / 2
+)
+
+# Sea star effect (averaged over crab context)
+deltaS_star <- data.frame(
+  Site = baseline$Site,
+  delta = (baseline$prob - star_only$prob + crab_only$prob - both$prob) / 2
+)
+
+# Both predators (joint non-additive state vs baseline)
+deltaS_both <- data.frame(
+  Site = baseline$Site,
+  delta = baseline$prob - both$prob
+)
+
+# -------------------------------------------------
+# 5. MERGE WITH DENSITIES
+# -------------------------------------------------
+
+ppis_crab <- merge(deltaS_crab, crab_density, by = "Site")
+ppis_star <- merge(deltaS_star, star_density, by = "Site")
+ppis_both <- merge(deltaS_both, both_density, by = "Site")
+
+# -------------------------------------------------
+# 6. COMPUTE PER-CAPITA + PPIS
+# -------------------------------------------------
+
+ppis_crab <- ppis_crab %>%
+  dplyr::mutate(
+    density    = mean_density,
+    per_capita = delta / density,
+    PPIS       = delta * density,
+    Predator   = "Crab"
+  )
+
+ppis_star <- ppis_star %>%
+  dplyr::mutate(
+    density    = mean_density,
+    per_capita = delta / density,
+    PPIS       = delta * density,
+    Predator   = "Sea star"
+  )
+
+ppis_both <- ppis_both %>%
+  dplyr::mutate(
+    density    = combined_density,
+    per_capita = delta / density,
+    PPIS       = delta * density,
+    Predator   = "Both"
+  )
+
+# -------------------------------------------------
+# 7. FINAL COMBINED DATASET
+# -------------------------------------------------
+
+ppis_all <- dplyr::bind_rows(
+  ppis_crab %>% dplyr::select(Site, Predator, delta, density, per_capita, PPIS),
+  ppis_star %>% dplyr::select(Site, Predator, delta, density, per_capita, PPIS),
+  ppis_both %>% dplyr::select(Site, Predator, delta, density, per_capita, PPIS)
+)
+```
+
+
+
+```{r}
+
+# Recode Predator factor
+ppis_all <- ppis_all %>%
+  mutate(
+    Predator = factor(Predator, levels = c("Sea star", "Crab", "Both"))
+  )
+
+# PCIS plot with manual colors hardcoded
+PCIS<- ggplot(ppis_all, aes(x = per_capita, y = Site, fill = Predator)) +
+  geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
+  geom_point(shape = 21, size = 7, position = position_dodge(0.0)) +
+    scale_x_continuous(breaks = seq(0,2.5,0.5), limits = c(0,2.5), expand = c(0.1,0)) +
+scale_fill_manual(
+    values = c(
+      "Sea star" = "#66c2a5",  # green
+      "Crab" = "#fc8d62",      # orange
+      "Both" = "#8da0cb"       # purple
+    ),
+    labels = c(
+      "Sea star" = expression(italic(Pisaster)),
+      "Crab" = "Rock crabs",
+      "Both" = expression(italic(Pisaster) ~ "+ Rock crabs")
+    )
+  ) +
+  labs(x = "Per capita interaction strength", y = NULL, fill = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",  # Legend on top
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 20),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_text(size = 24, margin = margin(r = 20)),   
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.text.x = element_text(size = 20),
+    axis.title.x = element_text(size = 24));PCIS
+
+# PPIS plot with manual colors hardcoded
+PPIS <- ggplot(ppis_all, aes(x = PPIS, y = Site, fill = Predator)) +
+  geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
+  geom_point(shape = 21, size = 7, position = position_dodge(0.0)) +
+  scale_x_continuous(breaks = seq(0,0.4,0.1), limits = c(0,0.4), expand = c(0.1,0)) +
+scale_fill_manual(
+    values = c(
+      "Sea star" = "#66c2a5",  # green
+      "Crab" = "#fc8d62",      # orange
+      "Both" = "#8da0cb"       # purple
+    ),
+    labels = c(
+      "Sea star" = expression(italic(Pisaster)),
+      "Crab" = "Rock crabs",
+      "Both" = expression(italic(Pisaster) ~ "+ Rock crabs")
+    )
+  ) +
+  labs(x = "Per population interaction strength", y = NULL, fill = NULL) +
+  theme_classic() +
+  theme(
+    legend.position = "top",  # Legend on top
+    legend.text = element_text(size = 18),
+    legend.title = element_text(size = 20),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_text(size = 24, margin = margin(r = 20)),   
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.text.x = element_text(size = 20),
+    axis.title.x = element_text(size = 24));PPIS
+
+
+# Add tags to individual plots
+PCIS <- PCIS + labs(tag = "A") +
+  theme(
+    plot.tag = element_text(size = 24)  # adjust tag style
+  )
+
+PPIS <- PPIS + labs(tag = "B") +
+  theme(
+    plot.tag = element_text(size = 24)
+  )
+
+# Extract shared legend from PCIS_plot
+shared_legend <- get_legend(
+  PCIS + theme(legend.position = "top", legend.text = element_text(size = 18), legend.title = element_blank())
+)
+
+# Remove legends from plots now that legend is shared
+PCIS <- PCIS + theme(legend.position = "none")
+PPIS <- PPIS + theme(legend.position = "none")
+
+# Add vertical spacer
+spacer <- ggdraw() + theme_void()
+
+# Combine plots with shared legend on top
+interactions_cow <- plot_grid(
+  shared_legend,                             # legend at top
+  plot_grid(
+    PCIS,
+    spacer,
+    PPIS,
+    ncol = 1,
+    rel_heights = c(1, 0.2, 1)              # adjust spacer height
+  ),
+  ncol = 1,
+  rel_heights = c(0.1, 1)                    # legend relative height
+)
+
+# Display combined figure
+interactions_cow
+
+```
+

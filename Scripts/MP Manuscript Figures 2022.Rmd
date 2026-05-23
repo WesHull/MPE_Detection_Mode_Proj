@@ -12,6 +12,14 @@ output: html_document
 
 ```{r}
 library(tidyverse)
+library(plyr)
+library(Rmisc)
+library(ggplot2)
+library(RColorBrewer)
+library(patchwork)
+library(ggpubr)
+
+
 library(lattice)
 library(psych)
 library(nlme)
@@ -33,6 +41,7 @@ library(GGally)
 library(treemapify)
 ```
 
+# Load Data
 ```{r}
 #load in the following data files
   #Recruitment_data_for_R_2020
@@ -41,15 +50,15 @@ library(treemapify)
   #Lab_Consumption_Data_2021
   #Star_Behavior_2020
 
-setwd("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data")
+Recruitment_data_for_R_2020 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Recruitment%20data%20for%20R%202020.csv")
+Field_Consumption_Data_2019 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Field%20Consumption%20Data_2019.csv")
+Lab_Consumption_Data_2021 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Lab_Consumption_Data_2021.csv")
+Star_Behavior_2020 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Pisaster.Measurements.All.2015.csv")
+Field_Density_Data_For_R_2019 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Field%20Density%20Data%20For%20R%202019.csv")
+```
 
-Recruitment_data_for_R_2020 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Recruitment data for R 2020.csv")
-Field_Consumption_Data_2019 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Field Consumption Data_2019.csv")
-Lab_Consumption_Data_2021 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Lab_Consumption_Data_2021.csv")
-Star_Behavior_2020 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Star_Behavior_2020.csv")
-Field_Density_Data_For_R_2019 <- read_csv("C:/Users/wwhul/OneDrive/Manuscripts/MPE PAPER/Data/Field Density Data For R 2019.csv")
-
-#Calculating summary statistics
+# Calculating summary statistics
+```{r}
 Recruitment_data_for_R_2020$Rec.Tuff.Day<-Recruitment_data_for_R_2020$Count/104
 Recruitment_data_for_R_2020$Log.Rec.Day<-log(Recruitment_data_for_R_2020$Rec.Tuff.Day)
 head(Recruitment_data_for_R_2020)
@@ -80,12 +89,9 @@ head(Lab_Consumption_Data_2021)
 ##    FIGURES
 ##
 ##########################################################################
+
+# generating consitent theme
 ```{r}
-library(ggplot2)
-library(RColorBrewer)
-display.brewer.all(colorblindFriendly = T)
-
-
 My_Theme = theme(
   axis.title.x = element_text(size = 30,colour = "black"),
   axis.text.x = element_text(size = 30,colour = "black"),
@@ -93,37 +99,36 @@ My_Theme = theme(
   axis.text.y = element_text(size = 30,colour = "black"),
   legend.title = element_blank(),
   legend.text = element_text(size = 30, colour = "black"),
-  title = element_text(size = 30, color = "black"))
-
-
+  title = element_text(size = 30, color = "black"),
+  panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
+```
 
 ###################################
 # Recruitment figure
 ###################################
-
-
-
+```{r, include=FALSE}
+# factorize site
 Recruitment_data_for_R_2020$Site=factor(Recruitment_data_for_R_2020$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
 
 Rec<-ggplot(Recruitment_data_for_R_2020, aes(x=`Site`, y = `Rec.Tuff.Day`, fill = `Orientation`))+
   geom_boxplot(colour = "black", shape = 19, size = 1.0)+
-  scale_y_continuous(breaks=seq(0.0,9.5,1.5),limits = c(0.0,9.5))+
-  scale_fill_brewer(palette = "Dark2")+
+  scale_y_continuous(breaks=seq(0.0,9,3),limits = c(0.0,9))+
+  scale_fill_brewer(palette = "Set2")+
   labs(x="", fill ="Orientation")+
-  ylab(expression(paste("Mussels · ",collector^-1," · ",day^-1,"", sep = "")))+
+  ylab(expression("Mussels " %.% collector^{-1} %.% day^{-1}))+
   theme_classic()+
-  border(size = 1.3)+
   theme(axis.ticks = element_line(size = 1.0), legend.position = c(.86,.93))+
   My_Theme
+
 Rec
 
-ggsave("Rec.Fig.png", width = 12, height = 10, units = c("in"), dpi = 600)
-
+#ggsave("Rec.Fig.png", width = 12, height = 10, units = c("in"), dpi = 600)
+```
 
 ###############################
 # Figure Field Density
 ###############################
-
+```{r}
 Den<-ggplot(Dens.Sum, aes(x=Site, y = Density, fill = Predator))+
   #geom_bar(stat = "summary",fun = "mean", color = "black", size = 1, position = position_dodge())+
   geom_errorbar(aes(ymin=Density-se, ymax=Density+se), width =0,size = 0.8, position = position_dodge(0.25))+
@@ -131,43 +136,36 @@ Den<-ggplot(Dens.Sum, aes(x=Site, y = Density, fill = Predator))+
   scale_fill_brewer(palette = "Dark2", labels = c(expression(italic(Pisaster),"Rock crabs")))+
   labs(x="", fill ="Predators")+
   scale_y_continuous(expand = c(0,0), breaks=seq(0.0,0.3,0.1,),limits = c(0.0,0.3))+
-  ylab(expression(paste("Individuals · ", m^-2, sep = "")))+
+  ylab(expression(paste("Predators " %.% m^-2, sep = "")))+
   theme_classic()+
-  border(size = 1.3)+
-  theme(axis.ticks = element_line(size = 1.0), legend.position = c(.86,.94))+
+  #border(size = 1.3)+
+  theme(axis.ticks = element_line(size = 1.0), legend.position = c(.86,.91))+
   My_Theme
+
 Den
 
 ggsave("Density.Fig.png", width = 12, height = 12, units = c("in"), dpi = 600)
+```
 
 ###############################
 # Figure Proportion Survival
 ###############################
-My_Theme = theme(
-  axis.title.x = element_text(size = 30,colour = "black"),
-  axis.text.x = element_text(size = 30,colour = "white"),
-  axis.title.y = element_text(size = 30,colour = "black"),
-  axis.text.y = element_text(size = 30,colour = "black"),
-  legend.title = element_blank(),
-  legend.text = element_text(size = 30, colour = "black"),
-  title = element_text(size = 30, color = "black"))
-
-
+```{r}
+# Factorize site
 Field.Sum$Site=factor(Field.Sum$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
 
-
 #Subset data
-
 PSG<-Field.Sum[9:12,]
 DG<-Field.Sum[5:8,]
 BP<-Field.Sum[1:4,]
 
-
+# Point St. George figure
+# Note: all mussels survive in control treatments, so there is no error bar for -crab, -star
 PSG.Fig<-ggplot(data = PSG, 
-                aes(x=`Treatment.S`, 
-                                y=`Proportion.Living`, 
-                                group = `Treatment.C`,
-                     fill = `Treatment.C`))+
+               aes(x=`Treatment.S`, 
+                   y=`Proportion.Living`, 
+                   group = `Treatment.C`,
+                   fill = `Treatment.C`))+
   geom_errorbar(aes(ymin=Proportion.Living-se, ymax=Proportion.Living+se),
                 color = "black", 
                 width =0,size = 0.8, 
@@ -180,7 +178,7 @@ PSG.Fig<-ggplot(data = PSG,
              shape=21,
              color = "black",
              stroke = 1)+
-  scale_fill_brewer(palette = "Dark2")+
+  scale_fill_brewer(palette = "Set2")+
 
   scale_x_discrete(labels=expression("- "~italic(Pisaster),
                                      "+ "~italic(Pisaster)))+
@@ -191,32 +189,31 @@ PSG.Fig<-ggplot(data = PSG,
        group = "Predator", 
        fill = "")+
   theme_classic()+
-  border(size = 1.3)+
   ggtitle("Point St. George")+
-  theme(title = element_text(size = 20, 
-                             color = "black"), 
+  theme(title = element_text(size = 30, color = "black"), 
         axis.ticks = element_line(size = 1.0), 
         legend.position = "top",
-        legend.text = element_text(color = "black",
-                                   size = 16),
+        legend.text = element_text(color = "black",size = 30),
         legend.title = element_blank(),
-        plot.title = element_text(hjust = 0.5,
-                                  size = 22),
+        plot.title = element_text(hjust = 0.5,size = 40),
         axis.text.x = element_text(color = "white"),
         axis.title.y = element_text(),
-        axis.text.y = element_text(color = "black", size = 16),
-        axis.title.y.left = element_text(color = "black",
-                                         size = 18))
+        axis.text.y = element_text(color = "black", size = 30),
+        axis.title.y.left = element_text(color = "black",size = 30),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
   
 PSG.Fig
 
-ggsave("PSG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+#ggsave("PSG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
 
+
+# Devils gate figure
+# No mussels died in the control plots so no measure of error for -crab, -star treatments
 DG.Fig<-ggplot(data = DG, 
                aes(x=`Treatment.S`, 
                    y=`Proportion.Living`, 
-                   group = `Treatment.C`))+
-  scale_color_brewer(palette = "Dark2")+
+                   group = `Treatment.C`,
+                   fill = `Treatment.C`))+
   geom_errorbar(aes(ymin=Proportion.Living-se, 
                     ymax=Proportion.Living+se),
                 color = "black", 
@@ -227,45 +224,42 @@ DG.Fig<-ggplot(data = DG,
             size = 1.0, 
             color = "black")+
   geom_point(aes(color = Treatment.C), 
-             size=4,
-             shape=19, 
-             stroke = 1.5)+
+             size=5,
+             shape=21,
+             color = "black",
+             stroke = 1)+
+  scale_fill_brewer(palette = "Set2")+
   scale_x_discrete(labels=expression("- "~italic(Pisaster),
                                      "+ "~italic(Pisaster)))+
   scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
                      limits = c(0.0,1.0))+
   labs(x="",
-       y="Proportion of Live Mussels", 
+       y="", 
        group = "Predator")+
   theme_classic()+
-  border(size = 1.3)+
   ggtitle("Devil's Gate")+
-  theme(title = element_text(size = 20, 
-                             color = "black"), 
+  theme(title = element_text(size = 30, color = "black"), 
         axis.ticks = element_line(size = 1.0), 
         legend.position = "top",
-        legend.text = element_text(color = "black",
-                                   size = 16),
+        legend.text = element_text(color = "black",size = 30),
         legend.title = element_blank(),
-        plot.title = element_text(hjust = 0.5,
-                                  size = 22),
+        plot.title = element_text(hjust = 0.5,size = 40),
         axis.text.x = element_text(color = "white"),
         axis.title.y = element_text(),
-        axis.text.y = element_text(color = "white", size = 16),
-        axis.title.y.left = element_text(color = "white",
-                                         size = 18))
-
+        axis.text.y = element_text(color = "white", size = 30),
+        axis.title.y.left = element_text(color = "black",size = 30),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
 
 DG.Fig
 
-ggsave("DG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+#ggsave("DG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
 
 
 BP.Fig<-ggplot(data = BP, 
                aes(x=`Treatment.S`, 
                    y=`Proportion.Living`, 
-                   group = `Treatment.C`))+
-  scale_color_brewer(palette = "Dark2")+
+                   group = `Treatment.C`,
+                   fill = `Treatment.C`))+
   geom_errorbar(aes(ymin=Proportion.Living-se, 
                     ymax=Proportion.Living+se),
                 color = "black", 
@@ -274,46 +268,43 @@ BP.Fig<-ggplot(data = BP,
                 position = position_dodge(0.0))+
   geom_line(aes(color=Treatment.C), 
             size = 1.0, color = "black")+
-  geom_point(aes(color = Treatment.C),
-             size=4,
-             shape=19, 
-             stroke = 1.5)+
+  geom_point(aes(color = Treatment.C), 
+             size=5,
+             shape=21,
+             color = "black",
+             stroke = 1)+
+  scale_fill_brewer(palette = "Set2")+
   scale_x_discrete(labels=expression("- "~italic(Pisaster),
                                      "+ "~italic(Pisaster)))+
   scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
                      limits = c(0.0,1.0))+
   labs(x="",
-       y="Proportion of Live Mussels", 
+       y="", 
        group = "Predator")+
   theme_classic()+
-  border(size = 1.3)+
   ggtitle("Belinda Point")+
-  theme(title = element_text(size = 20, 
-                             color = "black"), 
+  theme(title = element_text(size = 30, color = "black"), 
         axis.ticks = element_line(size = 1.0), 
         legend.position = "top",
-        legend.text = element_text(color = "black",
-                                   size = 16),
+        legend.text = element_text(color = "black",size = 30),
         legend.title = element_blank(),
-        plot.title = element_text(hjust = 0.5,
-                                  size = 22),
+        plot.title = element_text(hjust = 0.5,size = 40),
         axis.text.x = element_text(color = "white"),
         axis.title.y = element_text(),
-        axis.text.y = element_text(color = "white", size = 16),
-        axis.title.y.left = element_text(color = "white",
-                                         size = 18))
-
+        axis.text.y = element_text(color = "white", size = 30),
+        axis.title.y.left = element_text(color = "black",size = 30),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
 
 BP.Fig
 
-ggsave("BP.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
-
-ggarrange(PSG.Fig,DG.Fig,BP.Fig, common.legend = TRUE, ncol = 3, nrow = 1)
-
+# Now arrange with common legend
+ggarrange(PSG.Fig, DG.Fig, BP.Fig, common.legend = TRUE, ncol = 3, nrow = 1)
+```
 
 ###############################
 # Figure Proportion Survival
 ###############################
+```{r}
 My_Theme = theme(
   axis.title.x = element_text(size = 30,colour = "black"),
   axis.text.x = element_text(size = 30,colour = "black"),
@@ -323,62 +314,41 @@ My_Theme = theme(
   legend.text = element_text(size = 30, colour = "black"),
   title = element_text(size = 30, color = "black"))
 
-
+# factorize site
 LN.Sum$Site=factor(LN.Sum$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
 
-
 #Subset data
-
 LN.PSG<-LN.Sum[9:12,]
 LN.DG<-LN.Sum[5:8,]
 LN.BP<-LN.Sum[1:4,]
 
-LN.PSG.Fig<-ggplot(data = LN.PSG, 
-                   aes(x=`Treatment.S`, 
-                       y=`LN.Rate.Survival.Day`, 
-                       group = `Treatment.C`))+
-  scale_color_brewer(palette = "Dark2")+
-  geom_errorbar(aes(ymin=LN.Rate.Survival.Day-se, 
-                    ymax=LN.Rate.Survival.Day+se),
-                color = "black", 
-                width =0,
-                size = 0.8, 
-                position = position_dodge(0.0))+
-  geom_line(aes(color=Treatment.C), 
-            size = 1.0, 
-            color = "black")+
-  geom_point(aes(color = Treatment.C), 
-             size=4,
-             shape=19, 
-             stroke = 1.5)+ 
-  scale_x_discrete(labels=expression("- "~italic(Pisaster),
-                                     "+ "~italic(Pisaster)))+
-  scale_y_continuous(breaks=seq(-0.2,0.0,0.1,),
-                     limits = c(-0.2,0.0))+
-  labs(x="",
-       y=expression(paste("Ln(Mussel Survival Â· ", Day^-1, sep = ")")), 
-       group = "Predator")+
+# PSG
+LN.PSG.Fig<-ggplot(data = LN.PSG,aes(x=`Treatment.S`, y=`LN.Rate.Survival.Day`, group = `Treatment.C`, fill = `Treatment.C`))+
+  geom_errorbar(aes(ymin=LN.Rate.Survival.Day-se, ymax=LN.Rate.Survival.Day+se), color = "black", width =0, size = 0.8, position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C),size = 1.0,color = "black")+
+  geom_point(aes(color = Treatment.C),size=5,shape=21,color = "black",stroke = 1)+ 
+  scale_fill_brewer(palette = "Set2")+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster), "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(-0.2,0.0,0.1,),limits = c(-0.2,0.0))+
+  labs(x="",y=expression(paste("Ln(Mussel survival Â· ", day^-1, sep = ")")),group = "Predator")+
   theme_classic()+
   border(size = 1.3)+
   ggtitle("")+
-  theme(title = element_text(size = 20, 
-                             color = "black"), 
+  theme(title = element_text(size = 30, color = "black"), 
         axis.ticks = element_line(size = 1.0), 
         legend.position = "top",
-        legend.text = element_text(color = "black",
-                                   size = 16),
+        legend.text = element_text(color = "black",size = 30),
         legend.title = element_blank(),
-        plot.title = element_text(hjust = 0.5,
-                                  size = 22),
-        axis.text.x = element_text(color = "black",
-                                   size = 16),
-        axis.text.y = element_text(color = "black", size = 16),
-        axis.title.y.left = element_text(color = "black",
-                                         size = 18))
+        plot.title = element_text(hjust = 0.5,size = 40),
+        axis.text.x = element_text(color = "white"),
+        axis.title.y = element_text(),
+        axis.text.y = element_text(color = "black", size = 30),
+        axis.title.y.left = element_text(color = "black",size = 30),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
 
 LN.PSG.Fig
 
-ggsave("PSG.LN.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+#ggsave("PSG.LN.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
 
 
 LN.DG.Fig<-ggplot(data = LN.DG, 
@@ -579,7 +549,7 @@ ggsave("Pop.Fig.png", height = 11, width = 16, units = c("in"), dpi = 600)
 
 Int.Str<-ggarrange(Pop.Fig,PerCap.Fig, 
           common.legend = TRUE,
-          ncol = 1, nrow = 2)
+          ncol = 1, nrow = 2);Int.Str
 ggsave("Int.Str.png", height = 22, width = 18, units = c("in"), dpi = 600)
 
 ###############################
