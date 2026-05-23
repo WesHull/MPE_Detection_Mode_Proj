@@ -246,59 +246,7 @@ Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHul
 
 
 
-
-
-```{r}
-###############################################
-# potential analysis that includes 100 survival
-###############################################
-
-# Binomial analysis of mussel survival
-
-  #Total mussel check
-  Mussel_Survival_Data$total <- Mussel_Survival_Data$Survived+Mussel_Survival_Data$Consumed
-  
-  
-  # Step 1: construct full model
-  mod_full <- glmmTMB(
-    cbind(Survived, 30 - Survived) ~ Site * Treatment.C * Treatment.S +
-      (1 | Site:Block),
-    family = binomial,
-    data = Mussel_Survival_Data
-  )
-  
-  summary(mod_full)
-  
-  # make updated models that are reducing
-  mod2 <- update(mod_full, . ~ . - Site:Treatment.C:Treatment.S)
-  mod3 <- update(mod2, . ~ . - Site:Treatment.S)
-  mod4 <- update(mod3, . ~ . - Site:Treatment.C)
-  
-  
-  anova(mod_full, mod2, mod3, mod4)
-  
-    # full vs mod2: 3-way interaction can be removed
-    # mod2 vs mod3: no meaningful improvement
-    # mod3 vs mod4: some 2-way interactions are strongly supported
-  
-  Anova(mod2, type = "II")
-  
-    # assumptions
-      sim1 <- simulateResiduals(surv.mod1)
-      plot(sim1)
-      
-  # significant terms
-      # site
-      # crab treatment
-      # site x crab interaction
-      
-  # Post-Hoc    
-  surv_emm <- emmeans(mod2, pairwise ~ Treatment.C | Site, type = "response"); surv_emm    
-      
-
-```
-
-# Per captia and population intraction strengths
+# model selection, PCIS and PPIS
 ```{r}
 # PPIS = total population level impact of each predator type per site
   # PPIS = PPIS=(effect of predator on survival(effect size))×(predator abundance)
@@ -308,10 +256,99 @@ library(dplyr)
 library(emmeans)
 
 # -------------------------------------------------
-# 1. PREDATOR DENSITY (SITE LEVEL)
+# 1. FULL FACTORIAL MODEL
 # -------------------------------------------------
 
-pred_site <- dplyr::group_by(Field_Density_Data_For_R_2019, Site, Predator) %>%
+mod_full <- glmmTMB(
+  cbind(Survived, 30 - Survived) ~ Site * Treatment.C * Treatment.S +
+    (1 | Site:Block),
+  family = binomial,
+  data = Mussel_Survival_Data
+)
+
+summary(mod_full)
+
+
+# -------------------------------------------------
+# 2. MODEL SIMPLIFICATION
+# -------------------------------------------------
+
+mod2 <- update(mod_full, . ~ . - Site:Treatment.C:Treatment.S)
+mod3 <- update(mod2, . ~ . - Site:Treatment.S)
+mod4 <- update(mod3, . ~ . - Site:Treatment.C)
+
+anova(mod_full, mod2, mod3, mod4)
+Anova(mod2, type = "II")
+
+
+# -------------------------------------------------
+# 3. DIAGNOSTICS
+# -------------------------------------------------
+
+sim1 <- DHARMa::simulateResiduals(mod2)
+plot(sim1)
+
+
+# -------------------------------------------------
+# 4. POST-HOC MARGINAL MEANS (FACTORIAL STRUCTURE)
+# -------------------------------------------------
+
+library(emmeans)
+
+emm_df <- emmeans(
+  mod2,
+  ~ Treatment.C * Treatment.S | Site,
+  type = "response"
+) %>%
+  as.data.frame()
+
+emm_df
+# -------------------------------------------------
+# 5. EXTRACT TREATMENT COMBINATIONS
+# -------------------------------------------------
+
+baseline  <- emm_df %>% dplyr::filter(Treatment.C == "Absent",
+                                      Treatment.S == "Absent")
+
+crab_only <- emm_df %>% dplyr::filter(Treatment.C == "Present",
+                                      Treatment.S == "Absent")
+
+star_only <- emm_df %>% dplyr::filter(Treatment.C == "Absent",
+                                      Treatment.S == "Present")
+
+both      <- emm_df %>% dplyr::filter(Treatment.C == "Present",
+                                      Treatment.S == "Present")
+
+
+# -------------------------------------------------
+# 6. EFFECT SIZES (SIMPLE ΔS CONTRASTS)
+# -------------------------------------------------
+
+# Crab effect
+deltaS_crab <- data.frame(
+  Site = baseline$Site,
+  delta = baseline$prob - crab_only$prob
+)
+
+# Sea star effect
+deltaS_star <- data.frame(
+  Site = baseline$Site,
+  delta = baseline$prob - star_only$prob
+)
+
+# Combined treatment effect
+deltaS_both <- data.frame(
+  Site = baseline$Site,
+  delta = baseline$prob - both$prob
+)
+
+
+# -------------------------------------------------
+# 7. PREDATOR DENSITY (SITE LEVEL)
+# -------------------------------------------------
+
+pred_site <- Field_Density_Data_For_R_2019 %>%
+  dplyr::group_by(Site, Predator) %>%
   dplyr::summarise(
     mean_density = mean(Density, na.rm = TRUE),
     sd_density   = sd(Density, na.rm = TRUE),
@@ -323,99 +360,161 @@ pred_site <- dplyr::group_by(Field_Density_Data_For_R_2019, Site, Predator) %>%
 crab_density <- pred_site %>% dplyr::filter(Predator == "Crab")
 star_density <- pred_site %>% dplyr::filter(Predator == "Sea star")
 
-both_density <- dplyr::group_by(Field_Density_Data_For_R_2019, Site) %>%
+both_density <- Field_Density_Data_For_R_2019 %>%
+  dplyr::group_by(Site) %>%
   dplyr::summarise(
     combined_density = sum(Density, na.rm = TRUE),
     .groups = "drop"
   )
 
-# -------------------------------------------------
-# 2. MARGINAL MEANS (FULL FACTORIAL MODEL)
-# -------------------------------------------------
-
-emm_df <- emmeans(
-  mod2,
-  ~ Treatment.C * Treatment.S | Site,
-  type = "response"
-) %>%
-  as.data.frame()
 
 # -------------------------------------------------
-# 3. EXTRACT 2x2 TREATMENT STRUCTURE
-# -------------------------------------------------
-
-baseline  <- emm_df %>% dplyr::filter(Treatment.C == "Absent",  Treatment.S == "Absent")
-crab_only <- emm_df %>% dplyr::filter(Treatment.C == "Present", Treatment.S == "Absent")
-star_only <- emm_df %>% dplyr::filter(Treatment.C == "Absent",  Treatment.S == "Present")
-both      <- emm_df %>% dplyr::filter(Treatment.C == "Present", Treatment.S == "Present")
-
-# -------------------------------------------------
-# 4. EFFECT SIZES (DELTA SURVIVAL)
-# -------------------------------------------------
-
-# Crab effect (averaged over sea star context)
-deltaS_crab <- data.frame(
-  Site = baseline$Site,
-  delta = (baseline$prob - crab_only$prob + star_only$prob - both$prob) / 2
-)
-
-# Sea star effect (averaged over crab context)
-deltaS_star <- data.frame(
-  Site = baseline$Site,
-  delta = (baseline$prob - star_only$prob + crab_only$prob - both$prob) / 2
-)
-
-# Both predators (joint non-additive state vs baseline)
-deltaS_both <- data.frame(
-  Site = baseline$Site,
-  delta = baseline$prob - both$prob
-)
-
-# -------------------------------------------------
-# 5. MERGE WITH DENSITIES
+# 8. MERGE EFFECTS WITH DENSITY
 # -------------------------------------------------
 
 ppis_crab <- merge(deltaS_crab, crab_density, by = "Site")
 ppis_star <- merge(deltaS_star, star_density, by = "Site")
 ppis_both <- merge(deltaS_both, both_density, by = "Site")
 
+
 # -------------------------------------------------
-# 6. COMPUTE PER-CAPITA + PPIS
+# 9. COMPUTE PPIS + PCIS (CLEAN DEFINITIONS)
 # -------------------------------------------------
 
 ppis_crab <- ppis_crab %>%
   dplyr::mutate(
-    density    = mean_density,
-    per_capita = delta / density,
-    PPIS       = delta * density,
+    PPIS       = delta,
+    per_capita = delta / mean_density,
     Predator   = "Crab"
   )
 
 ppis_star <- ppis_star %>%
   dplyr::mutate(
-    density    = mean_density,
-    per_capita = delta / density,
-    PPIS       = delta * density,
+    PPIS       = delta,
+    per_capita = delta / mean_density,
     Predator   = "Sea star"
   )
 
 ppis_both <- ppis_both %>%
   dplyr::mutate(
-    density    = combined_density,
-    per_capita = delta / density,
-    PPIS       = delta * density,
+    PPIS       = delta,
+    per_capita = delta / combined_density,
     Predator   = "Both"
   )
 
+
 # -------------------------------------------------
-# 7. FINAL COMBINED DATASET
+# 10. FINAL COMBINED DATASET
 # -------------------------------------------------
 
 ppis_all <- dplyr::bind_rows(
-  ppis_crab %>% dplyr::select(Site, Predator, delta, density, per_capita, PPIS),
-  ppis_star %>% dplyr::select(Site, Predator, delta, density, per_capita, PPIS),
-  ppis_both %>% dplyr::select(Site, Predator, delta, density, per_capita, PPIS)
+  ppis_crab %>% dplyr::select(Site, Predator, delta, PPIS, per_capita),
+  ppis_star %>% dplyr::select(Site, Predator, delta, PPIS, per_capita),
+  ppis_both %>% dplyr::select(Site, Predator, delta, PPIS, per_capita)
 )
+
+
+
+
+
+
+
+
+
+# =================================================
+# GOLD-STANDARD PPIS + PCIS PIPELINE
+# =================================================
+
+library(dplyr)
+library(emmeans)
+
+# -------------------------------------------------
+# 1. FITTED MODEL (assumed already run)
+# mod2
+# -------------------------------------------------
+
+
+# -------------------------------------------------
+# 2. FULL FACTORIAL EMMeans (for structure)
+# -------------------------------------------------
+
+emm <- emmeans(mod2,
+               ~ Treatment.C * Treatment.S | Site,
+               type = "response")
+
+contr <- contrast(
+  emm,
+  method = list(
+    Crab = c(-1, 1, 0, 0),
+    Star = c(-1, 0, 1, 0),
+    Both = c(-1, 0, 0, 1)
+  ),
+  by = "Site"
+)
+
+ppis_df <- as.data.frame(contr)
+# -------------------------------------------------
+# 4. MERGE DENSITY DATA
+# -------------------------------------------------
+
+crab_density <- crab_density %>%
+  rename(density = mean_density)
+
+star_density <- star_density %>%
+  rename(density = mean_density)
+
+both_density <- both_density %>%
+  rename(density = combined_density)
+
+ppis_df <- ppis_df %>%
+  mutate(
+    Predator = rep(c("Crab", "Sea star", "Both"), length(unique(Site)))
+  ) %>%
+  left_join(
+    bind_rows(
+      crab_density %>% mutate(Predator = "Crab"),
+      star_density %>% mutate(Predator = "Sea star"),
+      both_density %>% mutate(Predator = "Both")
+    ),
+    by = c("Site", "Predator")
+  )
+
+
+# -------------------------------------------------
+# 5. PCIS + DELTA METHOD UNCERTAINTY
+# -------------------------------------------------
+
+ppis_df <- ppis_df %>%
+  mutate(
+    PCIS = PPIS / density,
+
+    # Delta method SE approximation:
+    PCIS_SE = sqrt((PPIS_SE / density)^2)
+  )
+
+
+# -------------------------------------------------
+# 6. 95% CONFIDENCE INTERVALS
+# -------------------------------------------------
+
+ppis_df <- ppis_df %>%
+  mutate(
+    PPIS_LCL = PPIS - 1.96 * PPIS_SE,
+    PPIS_UCL = PPIS + 1.96 * PPIS_SE,
+
+    PCIS_LCL = PCIS - 1.96 * PCIS_SE,
+    PCIS_UCL = PCIS + 1.96 * PCIS_SE
+  )
+
+
+# -------------------------------------------------
+# 7. FINAL OUTPUT
+# -------------------------------------------------
+
+ppis_all <- ppis_df %>%
+  select(Site, Predator,
+         PPIS, PPIS_SE, PPIS_LCL, PPIS_UCL,
+         PCIS, PCIS_SE, PCIS_LCL, PCIS_UCL)
 ```
 
 
@@ -432,7 +531,7 @@ ppis_all <- ppis_all %>%
 PCIS<- ggplot(ppis_all, aes(x = per_capita, y = Site, fill = Predator)) +
   geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
   geom_point(shape = 21, size = 7, position = position_dodge(0.0)) +
-    scale_x_continuous(breaks = seq(0,2.5,0.5), limits = c(0,2.5), expand = c(0.1,0)) +
+    scale_x_continuous(breaks = seq(0,6.0,1.5), limits = c(0,6.0), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
       "Sea star" = "#66c2a5",  # green
@@ -463,7 +562,7 @@ scale_fill_manual(
 PPIS <- ggplot(ppis_all, aes(x = PPIS, y = Site, fill = Predator)) +
   geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
   geom_point(shape = 21, size = 7, position = position_dodge(0.0)) +
-  scale_x_continuous(breaks = seq(0,0.4,0.1), limits = c(0,0.4), expand = c(0.1,0)) +
+  scale_x_continuous(breaks = seq(0,1,0.2), limits = c(0,1), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
       "Sea star" = "#66c2a5",  # green
