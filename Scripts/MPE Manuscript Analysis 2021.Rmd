@@ -419,31 +419,18 @@ ppis_all <- dplyr::bind_rows(
 
 
 
+emm <- emmeans(
+  mod2,
+  ~ Treatment.C * Treatment.S | Site,
+  type = "response"
+)
 
+# Regrid onto response scale
+emm_resp <- regrid(emm, transform = "response")
 
-# =================================================
-# GOLD-STANDARD PPIS + PCIS PIPELINE
-# =================================================
-
-library(dplyr)
-library(emmeans)
-
-# -------------------------------------------------
-# 1. FITTED MODEL (assumed already run)
-# mod2
-# -------------------------------------------------
-
-
-# -------------------------------------------------
-# 2. FULL FACTORIAL EMMeans (for structure)
-# -------------------------------------------------
-
-emm <- emmeans(mod2,
-               ~ Treatment.C * Treatment.S | Site,
-               type = "response")
-
-contr <- contrast(
-  emm,
+# Now compute contrasts
+ppis_contrasts <- contrast(
+  emm_resp,
   method = list(
     Crab = c(-1, 1, 0, 0),
     Star = c(-1, 0, 1, 0),
@@ -452,69 +439,62 @@ contr <- contrast(
   by = "Site"
 )
 
-ppis_df <- as.data.frame(contr)
-# -------------------------------------------------
-# 4. MERGE DENSITY DATA
-# -------------------------------------------------
+ppis_ci <- as.data.frame(ppis_contrasts)
 
-crab_density <- crab_density %>%
-  rename(density = mean_density)
+# add CIs
+ppis_ci <- summary(ppis_contrasts, infer = TRUE)
+ppis_ci <- as.data.frame(ppis_ci)
 
-star_density <- star_density %>%
-  rename(density = mean_density)
+# standardize the sign for CIs
+ppis_ci <- ppis_ci %>%
+  dplyr::mutate(
+    PPIS = -estimate,
+    lower = -asymp.UCL,
+    upper = -asymp.LCL
+  )
 
-both_density <- both_density %>%
-  rename(density = combined_density)
+# drop estimate column
+ppis_ci <- ppis_ci %>%
+  dplyr::select(Site, contrast, PPIS, lower, upper, SE)
 
-ppis_df <- ppis_df %>%
-  mutate(
-    Predator = rep(c("Crab", "Sea star", "Both"), length(unique(Site)))
-  ) %>%
-  left_join(
-    bind_rows(
-      crab_density %>% mutate(Predator = "Crab"),
-      star_density %>% mutate(Predator = "Sea star"),
-      both_density %>% mutate(Predator = "Both")
-    ),
+# merge CI data into plotting data
+ppis_all2 <- ppis_all %>%
+  dplyr::left_join(
+    ppis_ci %>%
+      dplyr::select(Site, contrast, PPIS, lower, upper, SE) %>%
+      dplyr::mutate(
+        Predator = dplyr::recode(
+          contrast,
+          "Crab" = "Crab",
+          "Star" = "Sea star",
+          "Both" = "Both"
+        )
+      ) %>%
+      dplyr::select(Site, Predator, lower, upper, SE),
     by = c("Site", "Predator")
   )
 
 
-# -------------------------------------------------
-# 5. PCIS + DELTA METHOD UNCERTAINTY
-# -------------------------------------------------
 
-ppis_df <- ppis_df %>%
+# getting PCIS error
+ppis_all2 <- ppis_all2 %>%
   mutate(
-    PCIS = PPIS / density,
+    SE_PCIS = SE / (per_capita / PPIS),
+    PCIS_lower = per_capita - 1.96 * SE_PCIS,
+    PCIS_upper = per_capita + 1.96 * SE_PCIS
+  )
 
-    # Delta method SE approximation:
-    PCIS_SE = sqrt((PPIS_SE / density)^2)
+ppis_all2 <- ppis_all2 %>%
+  mutate(
+    density = PPIS / per_capita,
+    
+    SE_PCIS = SE / density,
+    
+    PCIS_lower = per_capita - 1.96 * SE_PCIS,
+    PCIS_upper = per_capita + 1.96 * SE_PCIS
   )
 
 
-# -------------------------------------------------
-# 6. 95% CONFIDENCE INTERVALS
-# -------------------------------------------------
-
-ppis_df <- ppis_df %>%
-  mutate(
-    PPIS_LCL = PPIS - 1.96 * PPIS_SE,
-    PPIS_UCL = PPIS + 1.96 * PPIS_SE,
-
-    PCIS_LCL = PCIS - 1.96 * PCIS_SE,
-    PCIS_UCL = PCIS + 1.96 * PCIS_SE
-  )
-
-
-# -------------------------------------------------
-# 7. FINAL OUTPUT
-# -------------------------------------------------
-
-ppis_all <- ppis_df %>%
-  select(Site, Predator,
-         PPIS, PPIS_SE, PPIS_LCL, PPIS_UCL,
-         PCIS, PCIS_SE, PCIS_LCL, PCIS_UCL)
 ```
 
 
@@ -522,16 +502,17 @@ ppis_all <- ppis_df %>%
 ```{r}
 
 # Recode Predator factor
-ppis_all <- ppis_all %>%
+ppis_all2 <- ppis_all2 %>%
   mutate(
     Predator = factor(Predator, levels = c("Sea star", "Crab", "Both"))
   )
 
 # PCIS plot with manual colors hardcoded
-PCIS<- ggplot(ppis_all, aes(x = per_capita, y = Site, fill = Predator)) +
-  geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
-  geom_point(shape = 21, size = 7, position = position_dodge(0.0)) +
-    scale_x_continuous(breaks = seq(0,6.0,1.5), limits = c(0,6.0), expand = c(0.1,0)) +
+PCIS<- ggplot(ppis_all2, aes(x = per_capita, y = Site, fill = Predator)) +
+  #geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
+  geom_errorbarh(aes(xmin = PCIS_lower, xmax = PCIS_upper),height = 0,linewidth = 1, position = position_dodge(0.5), color = "grey40") +
+  geom_point(shape = 21, size = 7, position = position_dodge(0.5)) +
+  scale_x_continuous(breaks = seq(0,6.0,1.5), limits = c(0,6.0), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
       "Sea star" = "#66c2a5",  # green
@@ -559,9 +540,10 @@ scale_fill_manual(
     axis.title.x = element_text(size = 24));PCIS
 
 # PPIS plot with manual colors hardcoded
-PPIS <- ggplot(ppis_all, aes(x = PPIS, y = Site, fill = Predator)) +
-  geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
-  geom_point(shape = 21, size = 7, position = position_dodge(0.0)) +
+PPIS <- ggplot(ppis_all2, aes(x = PPIS, y = Site, fill = Predator)) +
+ # geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
+  geom_errorbarh(aes(xmin = lower, xmax = upper),height = 0,linewidth = 1, position = position_dodge(0.5), color = "grey40") +
+  geom_point(shape = 21, size = 7, position = position_dodge(0.5)) +
   scale_x_continuous(breaks = seq(0,1,0.2), limits = c(0,1), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
