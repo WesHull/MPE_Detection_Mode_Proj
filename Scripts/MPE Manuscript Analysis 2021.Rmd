@@ -23,6 +23,8 @@ library(lme4)
 library(lsmeans)
 library(car)
 library(cowplot)
+library(dplyr)
+library(emmeans)
 ```
 
 ## Data Files Needed in Analysis 
@@ -110,6 +112,16 @@ Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHul
           # Findings
               # Overall significant difference in seastar and crab abundance
               # Point St. George Had the highest predator density followed by Devil's Gate and Belinda Point
+  
+  
+density_site <- Field_Density_Data_For_R_2019 %>%
+  dplyr::group_by(Site, Predator) %>%
+  dplyr::summarise(
+    density = mean(Density, na.rm = TRUE),
+    .groups = "drop"
+  );density_site
+
+
 
 ```
   
@@ -252,13 +264,11 @@ Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHul
   # PPIS = PPIS=(effect of predator on survival(effect size))×(predator abundance)
     # effect size  =  survival in the respective absent treatment - the survival in the predator treatment
 
-library(dplyr)
-library(emmeans)
-
 # -------------------------------------------------
 # 1. FULL FACTORIAL MODEL
 # -------------------------------------------------
 
+# binomial distribution
 mod_full <- glmmTMB(
   cbind(Survived, 30 - Survived) ~ Site * Treatment.C * Treatment.S +
     (1 | Site:Block),
@@ -267,251 +277,181 @@ mod_full <- glmmTMB(
 )
 
 summary(mod_full)
+plot(simulateResiduals(mod_full))
+testDispersion(mod_full)
+
+# beta-binomial model
+mod_bb <- glmmTMB(
+  cbind(Survived, 30 - Survived) ~
+    Site * Treatment.C * Treatment.S +
+    (1 | Site:Block),
+  family = betabinomial(link = "logit"),
+  data = Mussel_Survival_Data
+)
+
+summary(mod_bb)
+plot(simulateResiduals(mod_bb))
 
 
 # -------------------------------------------------
 # 2. MODEL SIMPLIFICATION
 # -------------------------------------------------
 
-mod2 <- update(mod_full, . ~ . - Site:Treatment.C:Treatment.S)
+mod2 <- update(mod_bb, . ~ . - Site:Treatment.C:Treatment.S)
 mod3 <- update(mod2, . ~ . - Site:Treatment.S)
 mod4 <- update(mod3, . ~ . - Site:Treatment.C)
 
-anova(mod_full, mod2, mod3, mod4)
+# =================================================
+# Pairwise LRT
+# =================================================
+anova(mod_bb, mod2)
+
 Anova(mod2, type = "II")
 
-
-# -------------------------------------------------
-# 3. DIAGNOSTICS
-# -------------------------------------------------
-
-sim1 <- DHARMa::simulateResiduals(mod2)
-plot(sim1)
+# Strong spatial heterogeneity (Site dominates system)
+# Crabs are the dominant predator effect
+# Sea stars are weak / inconsistent
+# No predator synergy
+# Crab effects vary by site (context dependence)
 
 
-# -------------------------------------------------
-# 4. POST-HOC MARGINAL MEANS (FACTORIAL STRUCTURE)
-# -------------------------------------------------
 
-library(emmeans)
-
-emm_df <- emmeans(
-  mod2,
+# =================================================
+# 1. Estimated marginal means (response scale)
+# =================================================
+emm <- emmeans(
+  mod_bb,
   ~ Treatment.C * Treatment.S | Site,
   type = "response"
-) %>%
-  as.data.frame()
-
-emm_df
-# -------------------------------------------------
-# 5. EXTRACT TREATMENT COMBINATIONS
-# -------------------------------------------------
-
-baseline  <- emm_df %>% dplyr::filter(Treatment.C == "Absent",
-                                      Treatment.S == "Absent")
-
-crab_only <- emm_df %>% dplyr::filter(Treatment.C == "Present",
-                                      Treatment.S == "Absent")
-
-star_only <- emm_df %>% dplyr::filter(Treatment.C == "Absent",
-                                      Treatment.S == "Present")
-
-both      <- emm_df %>% dplyr::filter(Treatment.C == "Present",
-                                      Treatment.S == "Present")
-
-
-# -------------------------------------------------
-# 6. EFFECT SIZES (SIMPLE ΔS CONTRASTS)
-# -------------------------------------------------
-
-# Crab effect
-deltaS_crab <- data.frame(
-  Site = baseline$Site,
-  delta = baseline$prob - crab_only$prob
 )
 
-# Sea star effect
-deltaS_star <- data.frame(
-  Site = baseline$Site,
-  delta = baseline$prob - star_only$prob
-)
+emm_df <- as.data.frame(emm)
 
-# Combined treatment effect
-deltaS_both <- data.frame(
-  Site = baseline$Site,
-  delta = baseline$prob - both$prob
-)
+# =================================================
+# 2. Extract treatment means + SE (aligned)
+# =================================================
+ppis <- emm_df %>%
+  select(Site, Treatment.C, Treatment.S, prob, SE) %>%
+  mutate(Group = case_when(
+    Treatment.C == "Absent"  & Treatment.S == "Absent"  ~ "control",
+    Treatment.C == "Present" & Treatment.S == "Absent"  ~ "crab",
+    Treatment.C == "Absent"  & Treatment.S == "Present" ~ "star",
+    Treatment.C == "Present" & Treatment.S == "Present" ~ "both"
+  )) %>%
+  select(Site, Group, prob, SE) %>%
+  tidyr::pivot_wider(
+    names_from = Group,
+    values_from = c(prob, SE)
+  )
 
+# =================================================
+# 3. Compute PPIS effects + SE propagation
+# =================================================
+ppis <- ppis %>%
+  mutate(
+    PPIS_crab = prob_control - prob_crab,
+    PPIS_star = prob_control - prob_star,
+    PPIS_both = prob_control - prob_both,
 
-# -------------------------------------------------
-# 7. PREDATOR DENSITY (SITE LEVEL)
-# -------------------------------------------------
+    SE_crab = sqrt(SE_control^2 + SE_crab^2),
+    SE_star = sqrt(SE_control^2 + SE_star^2),
+    SE_both = sqrt(SE_control^2 + SE_both^2)
+  )
 
-pred_site <- Field_Density_Data_For_R_2019 %>%
+# =================================================
+# 4. Reshape to long format (SAFE + aligned)
+# =================================================
+ppis_long <- ppis %>%
+  select(
+    Site,
+    PPIS_crab, PPIS_star, PPIS_both,
+    SE_crab, SE_star, SE_both
+  ) %>%
+  tidyr::pivot_longer(
+    cols = starts_with("PPIS_"),
+    names_to = "Predator",
+    values_to = "PPIS"
+  ) %>%
+  mutate(
+    SE = case_when(
+      Predator == "PPIS_crab" ~ SE_crab,
+      Predator == "PPIS_star" ~ SE_star,
+      Predator == "PPIS_both" ~ SE_both
+    ),
+    Predator = dplyr::recode(
+      Predator,
+      PPIS_crab = "Crab",
+      PPIS_star = "Sea star",
+      PPIS_both = "Both"
+    )
+  ) %>%
+  select(Site, Predator, PPIS, SE)
+
+ppis_long <- ppis_long %>%
+  mutate(
+    PPIS_lower = PPIS - 1.96 * SE,
+    PPIS_upper = PPIS + 1.96 * SE
+  )
+
+# =================================================
+# 5. Field predator densities (site means)
+# =================================================
+density_site <- Field_Density_Data_For_R_2019 %>%
   dplyr::group_by(Site, Predator) %>%
   dplyr::summarise(
-    mean_density = mean(Density, na.rm = TRUE),
-    sd_density   = sd(Density, na.rm = TRUE),
-    n_transects  = dplyr::n(),
-    se_density   = sd_density / sqrt(n_transects),
+    density = mean(Density, na.rm = TRUE),
     .groups = "drop"
   )
 
-crab_density <- pred_site %>% dplyr::filter(Predator == "Crab")
-star_density <- pred_site %>% dplyr::filter(Predator == "Sea star")
-
-both_density <- Field_Density_Data_For_R_2019 %>%
+# combined predator density ("Both")
+density_both <- density_site %>%
   dplyr::group_by(Site) %>%
   dplyr::summarise(
-    combined_density = sum(Density, na.rm = TRUE),
+    density = sum(density),
     .groups = "drop"
-  )
+  ) %>%
+  dplyr::mutate(Predator = "Both")
 
+density_all <- dplyr::bind_rows(density_site, density_both)
 
-# -------------------------------------------------
-# 8. MERGE EFFECTS WITH DENSITY
-# -------------------------------------------------
+# =================================================
+# 6. Merge PPIS + density
+# =================================================
+ppis_long <- ppis_long %>%
+  left_join(density_all, by = c("Site", "Predator"))
 
-ppis_crab <- merge(deltaS_crab, crab_density, by = "Site")
-ppis_star <- merge(deltaS_star, star_density, by = "Site")
-ppis_both <- merge(deltaS_both, both_density, by = "Site")
-
-
-# -------------------------------------------------
-# 9. COMPUTE PPIS + PCIS (CLEAN DEFINITIONS)
-# -------------------------------------------------
-
-ppis_crab <- ppis_crab %>%
-  dplyr::mutate(
-    PPIS       = delta,
-    per_capita = delta / mean_density,
-    Predator   = "Crab"
-  )
-
-ppis_star <- ppis_star %>%
-  dplyr::mutate(
-    PPIS       = delta,
-    per_capita = delta / mean_density,
-    Predator   = "Sea star"
-  )
-
-ppis_both <- ppis_both %>%
-  dplyr::mutate(
-    PPIS       = delta,
-    per_capita = delta / combined_density,
-    Predator   = "Both"
-  )
-
-
-# -------------------------------------------------
-# 10. FINAL COMBINED DATASET
-# -------------------------------------------------
-
-ppis_all <- dplyr::bind_rows(
-  ppis_crab %>% dplyr::select(Site, Predator, delta, PPIS, per_capita),
-  ppis_star %>% dplyr::select(Site, Predator, delta, PPIS, per_capita),
-  ppis_both %>% dplyr::select(Site, Predator, delta, PPIS, per_capita)
-)
-
-
-
-
-
-
-
-emm <- emmeans(
-  mod2,
-  ~ Treatment.C * Treatment.S | Site,
-  type = "response"
-)
-
-# Regrid onto response scale
-emm_resp <- regrid(emm, transform = "response")
-
-# Now compute contrasts
-ppis_contrasts <- contrast(
-  emm_resp,
-  method = list(
-    Crab = c(-1, 1, 0, 0),
-    Star = c(-1, 0, 1, 0),
-    Both = c(-1, 0, 0, 1)
-  ),
-  by = "Site"
-)
-
-ppis_ci <- as.data.frame(ppis_contrasts)
-
-# add CIs
-ppis_ci <- summary(ppis_contrasts, infer = TRUE)
-ppis_ci <- as.data.frame(ppis_ci)
-
-# standardize the sign for CIs
-ppis_ci <- ppis_ci %>%
-  dplyr::mutate(
-    PPIS = -estimate,
-    lower = -asymp.UCL,
-    upper = -asymp.LCL
-  )
-
-# drop estimate column
-ppis_ci <- ppis_ci %>%
-  dplyr::select(Site, contrast, PPIS, lower, upper, SE)
-
-# merge CI data into plotting data
-ppis_all2 <- ppis_all %>%
-  dplyr::left_join(
-    ppis_ci %>%
-      dplyr::select(Site, contrast, PPIS, lower, upper, SE) %>%
-      dplyr::mutate(
-        Predator = dplyr::recode(
-          contrast,
-          "Crab" = "Crab",
-          "Star" = "Sea star",
-          "Both" = "Both"
-        )
-      ) %>%
-      dplyr::select(Site, Predator, lower, upper, SE),
-    by = c("Site", "Predator")
-  )
-
-
-
-# getting PCIS error
-ppis_all2 <- ppis_all2 %>%
+# =================================================
+# 7. Compute PCIS + uncertainty
+# =================================================
+ppis_long <- ppis_long %>%
   mutate(
-    SE_PCIS = SE / (per_capita / PPIS),
-    PCIS_lower = per_capita - 1.96 * SE_PCIS,
-    PCIS_upper = per_capita + 1.96 * SE_PCIS
-  )
-
-ppis_all2 <- ppis_all2 %>%
-  mutate(
-    density = PPIS / per_capita,
-    
+    PCIS = PPIS / density,
     SE_PCIS = SE / density,
-    
-    PCIS_lower = per_capita - 1.96 * SE_PCIS,
-    PCIS_upper = per_capita + 1.96 * SE_PCIS
+    PCIS_lower = PCIS - 1.96 * SE_PCIS,
+    PCIS_upper = PCIS + 1.96 * SE_PCIS
   )
 
+# =================================================
+# 8. Final output
+# =================================================
+ppis_long
 
 ```
 
-
-
+# Figures: PPIS and PCIS
 ```{r}
 
 # Recode Predator factor
-ppis_all2 <- ppis_all2 %>%
+ppis_long <- ppis_long %>%
   mutate(
     Predator = factor(Predator, levels = c("Sea star", "Crab", "Both"))
   )
 
 # PCIS plot with manual colors hardcoded
-PCIS<- ggplot(ppis_all2, aes(x = per_capita, y = Site, fill = Predator)) +
+PCIS<- ggplot(ppis_long, aes(x = PCIS, y = Site, fill = Predator)) +
   #geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
   geom_errorbarh(aes(xmin = PCIS_lower, xmax = PCIS_upper),height = 0,linewidth = 1, position = position_dodge(0.5), color = "grey40") +
-  geom_point(shape = 21, size = 7, position = position_dodge(0.5)) +
+  geom_point(shape = 21, size = 5, position = position_dodge(0.5)) +
   scale_x_continuous(breaks = seq(0,6.0,1.5), limits = c(0,6.0), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
@@ -533,17 +473,15 @@ scale_fill_manual(
     legend.title = element_text(size = 20),
     axis.ticks.y = element_blank(),
     axis.line.y = element_blank(),
-    axis.text.y = element_text(size = 24, margin = margin(r = 20)),   
-    axis.ticks.x = element_blank(),
-    axis.line.x = element_blank(),
+    axis.text.y = element_text(size = 24, margin = margin(r = 20)),
     axis.text.x = element_text(size = 20),
     axis.title.x = element_text(size = 24));PCIS
 
 # PPIS plot with manual colors hardcoded
-PPIS <- ggplot(ppis_all2, aes(x = PPIS, y = Site, fill = Predator)) +
+PPIS <- ggplot(ppis_long, aes(x = PPIS, y = Site, fill = Predator)) +
  # geom_hline(yintercept = seq(1,3), linewidth = 1, color = "gray70") +
-  geom_errorbarh(aes(xmin = lower, xmax = upper),height = 0,linewidth = 1, position = position_dodge(0.5), color = "grey40") +
-  geom_point(shape = 21, size = 7, position = position_dodge(0.5)) +
+  geom_errorbarh(aes(xmin = PPIS_lower, xmax = PPIS_upper),height = 0,linewidth = 1, position = position_dodge(0.5), color = "grey40") +
+  geom_point(shape = 21, size = 5, position = position_dodge(0.5)) +
   scale_x_continuous(breaks = seq(0,1,0.2), limits = c(0,1), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
@@ -565,20 +503,18 @@ scale_fill_manual(
     legend.title = element_text(size = 20),
     axis.ticks.y = element_blank(),
     axis.line.y = element_blank(),
-    axis.text.y = element_text(size = 24, margin = margin(r = 20)),   
-    axis.ticks.x = element_blank(),
-    axis.line.x = element_blank(),
+    axis.text.y = element_text(size = 24, margin = margin(r = 20)),
     axis.text.x = element_text(size = 20),
     axis.title.x = element_text(size = 24));PPIS
 
 
 # Add tags to individual plots
-PCIS <- PCIS + labs(tag = "A") +
+PCIS <- PCIS + labs(tag = "B") +
   theme(
     plot.tag = element_text(size = 24)  # adjust tag style
   )
 
-PPIS <- PPIS + labs(tag = "B") +
+PPIS <- PPIS + labs(tag = "A") +
   theme(
     plot.tag = element_text(size = 24)
   )
@@ -599,9 +535,9 @@ spacer <- ggdraw() + theme_void()
 interactions_cow <- plot_grid(
   shared_legend,                             # legend at top
   plot_grid(
-    PCIS,
-    spacer,
     PPIS,
+    spacer,
+    PCIS,
     ncol = 1,
     rel_heights = c(1, 0.2, 1)              # adjust spacer height
   ),
