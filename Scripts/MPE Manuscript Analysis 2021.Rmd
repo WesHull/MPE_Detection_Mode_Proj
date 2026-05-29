@@ -987,7 +987,7 @@ interactions_cow
 
 ```{r}
 RecDen_cow
-ggsave("RecDen_cow.tiff", width = 6, height = 6, units = c("in"), dpi = 600)
+ggsave("RecDen_cow.tiff", width = 7, height = 7, units = c("in"), dpi = 600)
 
 pred.fig
 ggsave("pred.fig.tiff", width = 6, height = 6, units = c("in"), dpi = 600)
