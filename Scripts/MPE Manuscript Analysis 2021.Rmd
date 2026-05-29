@@ -85,26 +85,25 @@ Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHul
   head(Field_Density_Data_For_R_2019)
   
 # Full Model
-  Density.lm<-lm(Field_Density_Data_For_R_2019$Log.Density~Field_Density_Data_For_R_2019$Predator*Field_Density_Data_For_R_2019$Site)
-  summary(Density.lm)
+  Density.mod<-glmmTMB(Log.Density~Predator*Site, family = gaussian(), data = Field_Density_Data_For_R_2019)
+  summary(Density.mod)
+  Anova(Density.mod)
 
-# ANOVA
-  Density.aov<-aov(Density.lm)
-  summary(Density.aov)      # Interaction is not significant, re-run without interaction
+    # significant effect of predator and site
+    
+  # diagnostic
+  plot(simulateResiduals(Density.mod))
 
-# New model with/out interaction
-  Density.lm2<-lm(Field_Density_Data_For_R_2019$Log.Density~Field_Density_Data_For_R_2019$Predator+Field_Density_Data_For_R_2019$Site)
-  summary(Density.lm2)      
+# post-hoc
+  # site
+  emmeans(Density.mod, pairwise ~ Site, adjust = "tukey")
+  
+    # predator density was highest at PSG then DG then BP
+  
+  # predator
+  emmeans(Density.mod, pairwise ~ Predator)
 
-# New ANOVA
-  Density.aov2<-aov(Density.lm2)
-  summary(Density.aov2)     # Significant effect of predator type and site
-
-# Tukey's
-  TukeyHSD(Density.aov2)    
-          # Findings
-              # Overall significant difference in seastar and crab abundance
-              # Point St. George Had the highest predator density followed by Devil's Gate and Belinda Point
+    # Sea star density is higher than crab density
 ```
   
 # MUSSEL SURVIVAL ANALYSES 
@@ -443,12 +442,11 @@ Rec.or<-ggplot(Recruitment_data_for_R_2020, aes(x=`Orientation`, y = `Rec.Tuff.D
   labs(x="", fill ="")+
   ylab(expression("Mussels " %.% collector^{-1} %.% day^{-1}))+
   theme_classic()+
-  theme(axis.ticks = element_line(linewidth = 1.0),legend.position = c(.86, .91),
-    legend.text = element_text(size = 18),
-    axis.text.y = element_text(size = 20),
-    axis.title.y = element_text(size = 24), 
-    axis.text.x = element_text(size = 20),
-    axis.title.x = element_text(size = 24))
+  theme(axis.ticks = element_line(linewidth = 0.5),legend.position = c(.83, .93),
+    axis.text.y = element_text(size = 12),
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12),
+    axis.title.x = element_text(size = 14))
 Rec.or
 
 Rec.site<-ggplot(Recruitment_data_for_R_2020, aes(x=`Site`, y = `Rec.Tuff.Day`))+
@@ -458,12 +456,11 @@ Rec.site<-ggplot(Recruitment_data_for_R_2020, aes(x=`Site`, y = `Rec.Tuff.Day`))
   labs(x="", fill ="")+
   ylab(expression("Mussels " %.% collector^{-1} %.% day^{-1}))+
   theme_classic()+
-  theme(axis.ticks = element_line(linewidth = 1.0),legend.position = c(.86, .91),
-    legend.text = element_text(size = 18),
-    axis.text.y = element_text(size = 20),
-    axis.title.y = element_text(size = 24), 
-    axis.text.x = element_text(size = 20),
-    axis.title.x = element_text(size = 24))
+  theme(axis.ticks = element_line(linewidth = 0.5),legend.position = c(.83, .93),
+    axis.text.y = element_text(size = 12),
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12),
+    axis.title.x = element_text(size = 14))
 Rec.site
 
 #ggsave("Rec.Fig.png", width = 12, height = 10, units = c("in"), dpi = 600)
@@ -504,55 +501,84 @@ Field_Density_Data_For_R_2019$Site=factor(Field_Density_Data_For_R_2019$Site, le
 Field_Density_Data_For_R_2019$Predator=factor(Field_Density_Data_For_R_2019$Predator, levels = c("Sea star","Crab"), ordered = TRUE)
 
 
-Den <- ggplot(
+Den.site <- ggplot(
   Field_Density_Data_For_R_2019,
-  aes(x = Site, y = Density, fill = Predator)) +
+  aes(x = Site, y = Density)) +
   geom_boxplot(
     width = 0.65,
     alpha = 0.8,
     outlier.shape = NA,
     position = position_dodge(width = 0.75),
     color = "black") +
-  scale_fill_manual(
-    values = c("#CC79A7", "#E69F00"),
-    labels = c(expression(italic(Pisaster)), "Rock crabs")) +
-  scale_shape_manual(values = c(24, 21)) +
-  labs(x = "", fill="") +
+  labs(x = "") +
+  scale_x_discrete(labels = c(
+  "Point St. George" = "PSG",
+  "Devil's Gate" = "DG",
+  "Belinda Point" = "BP"))+
   scale_y_continuous(
     expand = c(0, 0),
     breaks = seq(0.0, 0.3, 0.1),
     limits = c(0.0, 0.3)) +
   ylab(expression(paste("Predators " %.% m^-2, sep = ""))) +
   theme_classic() +
-  theme(axis.ticks = element_line(linewidth = 1.0),legend.position = c(.83, .93),
-    legend.text = element_text(size = 18),
-    axis.text.y = element_text(size = 20),
-    axis.title.y = element_text(size = 24), 
-    axis.text.x = element_text(size = 20),
-    axis.title.x = element_text(size = 24))
+  theme(axis.ticks = element_line(linewidth = 0.5),legend.position = c(.83, .93),
+    axis.text.y = element_text(size = 12),
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12),
+    axis.title.x = element_text(size = 14));Den.site
 
-Den
+Den.pred <- ggplot(
+  Field_Density_Data_For_R_2019,
+  aes(x = Predator, y = Density)) +
+  geom_boxplot(
+    width = 0.65,
+    alpha = 0.8,
+    outlier.shape = NA,
+    position = position_dodge(width = 0.75),
+    color = "black") +
+  labs(x = "") +
+  scale_y_continuous(
+    expand = c(0, 0),
+    breaks = seq(0.0, 0.3, 0.1),
+    limits = c(0.0, 0.3)) +
+  scale_x_discrete(labels = c(expression(italic("Pisaster"), "Rock crabs")))+
+  ylab(expression(paste("Predators " %.% m^-2, sep = ""))) +
+  theme_classic() +
+  theme(axis.ticks = element_line(linewidth = 0.5),legend.position = c(.83, .93),
+    axis.text.y = element_text(size = 12),
+    axis.title.y = element_text(size = 14), 
+    axis.text.x = element_text(size = 12),
+    axis.title.x = element_text(size = 14));Den.pred
 ```
 
 # Merge recruitment and density
 ```{r}
 # Add tags to individual plots
-Rec.or <- Rec.or + labs(tag = "A") +
+Rec.site <- Rec.site + labs(tag = "A") +
   theme(
-    plot.tag = element_text(size = 24)  # adjust tag style
+    plot.tag = element_text(size = 14),
+    axis.text.x = element_text(color = "white"),
+    plot.margin = margin(b = 30)
   )
 
-Rec.site <- Rec.site + 
-  labs(tag = "B") +
+Rec.or <- Rec.or + labs(tag = "B") +
   theme(
-    plot.tag = element_text(size = 24),
-    axis.title.y = element_blank(),
-    axis.text.y  = element_text(color = "white")
+    plot.tag = element_text(size = 14),
+    axis.title.y = element_text(color = "white"),
+    axis.text.y = element_text(color = "white"),
+    plot.margin = margin(b = 30)
   )
 
-Den <- Den + labs(tag = "C") +
+Den.site <- Den.site + labs(tag = "C") +
   theme(
-    plot.tag = element_text(size = 24)
+    plot.tag = element_text(size = 14)
+  )
+
+Den.pred <- Den.pred + labs(tag = "D") +
+  theme(
+    plot.tag = element_text(size = 14),
+    axis.title.y = element_text(color = "white"),
+    axis.text.y = element_text(color = "white"),
   )
 
 # Add vertical spacer
@@ -560,16 +586,14 @@ spacer <- ggdraw() + theme_void()
 
 # Combine plots with shared legend on top
 RecDen_cow <- plot_grid(
-  plot_grid(
-    Rec.or,
-    Rec.site,
-    Den,
-    ncol = 3,
-    rel_heights = c(1, 0.2, 1)              # adjust spacer height
-  ),
-  ncol = 1,
-  rel_heights = c(0.1, 1)                    # legend relative height
-)
+  Rec.site,
+  Rec.or,
+  Den.site,
+  Den.pred,
+  ncol = 2,
+  nrow = 2,
+  align = "hv",
+  axis = "tblr")
 
 # Display combined figure
 RecDen_cow
