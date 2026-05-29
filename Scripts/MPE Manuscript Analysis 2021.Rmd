@@ -46,46 +46,39 @@ Mussel_Survival_Data <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_
 Pisaster_Measurements_All_2015 <-read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Pisaster.Measurements.All.2015.csv")
 Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Crab.Meausrements.All.2015.csv")
 ```
+
 # RECRUITMENT ANALYSIS 
- Goals
-    1) Determine if mussel recruitment differs across our field sites.
-    2) Determine if mussel recruitment differs between horizontal low and vertical high surfaces
 ```{r, echo = TRUE}
 # New column dividing recruit count by days in the field
   Recruitment_data_for_R_2020$Rec.Tuff.Day<-Recruitment_data_for_R_2020$Count/104
   Recruitment_data_for_R_2020$Log.Rec.Day<-log(Recruitment_data_for_R_2020$Rec.Tuff.Day)
   
-  head(Recruitment_data_for_R_2020)
-
 # Full model
-  Mod1<-lm(Recruitment_data_for_R_2020$Log.Rec.Day~Recruitment_data_for_R_2020$Orientation*Recruitment_data_for_R_2020$Site)
-  summary(Mod1)
+  Rec.mod <- glmmTMB(Log.Rec.Day ~ Orientation * Site + (1 | Site:Plot), family = gaussian(), data = Recruitment_data_for_R_2020)
+  summary(Rec.mod)
+  Anova(Rec.mod)
 
-# ANOVA
-  Mod1.aov<-aov(Mod1)
-  summary(Mod1.aov)     # Interaction is not significant, so remove it and re-run model
+    # interaction not significant
+    # significant main effects of orientation and site
+  
+  # diagnostics
+  rec.res <- simulateResiduals(fittedModel = Rec.mod)
+  plot(rec.res)
 
-# New model with/out interaction
-  Mod2<-lm(Recruitment_data_for_R_2020$Log.Rec.Day~Recruitment_data_for_R_2020$Orientation+Recruitment_data_for_R_2020$Site)
-  summary(Mod2)
+# post-hoc
+  # orientation
+  emmeans(Rec.mod, pairwise ~ Orientation)
+  
+    # recruitment was higher on horizontal vs vertical surfaces
+  
+  # site
+  emmeans(Rec.mod, pairwise ~ Site, adjust = "tukey")
 
-# New ANOVA
-  Mod2.aov<-aov(Mod2)
-  summary(Mod2.aov)     #Significant effect of site and orientation
-                        #Run Tukeys to determine differences between sites
+    # Recruitment was highest at Point st. George, but did not differ between Devil's gate and Belinda point
 
-# Tukeys
-  TukeyHSD(Mod2.aov)
-        # Findings
-          # Overall significant difference in recruitment between vertical and horizontal surfaces
-          # Significantly more recruitment at Point St. George than Devil's Gate and Belinda Point
-          # No difference in recruitment between Devil's Gate and Belinda Point
 ```
 
 # DENSITY ANALYSIS 
- Goals:
-    1) Determine if predator density differs across our field sites.
-    2) Determine if predator density differs at each site
 ```{r, echo=TRUE}
 # New column with log transformed Density data 
   Field_Density_Data_For_R_2019$Log.Density<-log(Field_Density_Data_For_R_2019$Density)
@@ -112,17 +105,6 @@ Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHul
           # Findings
               # Overall significant difference in seastar and crab abundance
               # Point St. George Had the highest predator density followed by Devil's Gate and Belinda Point
-  
-  
-density_site <- Field_Density_Data_For_R_2019 %>%
-  dplyr::group_by(Site, Predator) %>%
-  dplyr::summarise(
-    density = mean(Density, na.rm = TRUE),
-    .groups = "drop"
-  );density_site
-
-
-
 ```
   
 # MUSSEL SURVIVAL ANALYSES 
@@ -438,6 +420,435 @@ ppis_long
 
 ```
 
+
+##########################
+# FIGURES
+##########################
+
+# Mussel recruitment
+```{r}
+Recruitment_data_for_R_2020$Rec.Tuff.Day<-Recruitment_data_for_R_2020$Count/104
+Recruitment_data_for_R_2020$Log.Rec.Day<-log(Recruitment_data_for_R_2020$Rec.Tuff.Day)
+head(Recruitment_data_for_R_2020)
+
+# factorize site
+Recruitment_data_for_R_2020$Site=factor(Recruitment_data_for_R_2020$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+
+
+# orientation
+Rec.or<-ggplot(Recruitment_data_for_R_2020, aes(x=`Orientation`, y = `Rec.Tuff.Day`))+
+  geom_boxplot(colour = "black", shape = 19)+
+  scale_y_continuous(breaks=seq(0.0,9,3),limits = c(0.0,9), expand = c(0,0))+
+  #scale_fill_manual(values = c("#CC79A7","#E69F00"))+
+  labs(x="", fill ="")+
+  ylab(expression("Mussels " %.% collector^{-1} %.% day^{-1}))+
+  theme_classic()+
+  theme(axis.ticks = element_line(linewidth = 1.0),legend.position = c(.86, .91),
+    legend.text = element_text(size = 18),
+    axis.text.y = element_text(size = 20),
+    axis.title.y = element_text(size = 24), 
+    axis.text.x = element_text(size = 20),
+    axis.title.x = element_text(size = 24))
+Rec.or
+
+Rec.site<-ggplot(Recruitment_data_for_R_2020, aes(x=`Site`, y = `Rec.Tuff.Day`))+
+  geom_boxplot(colour = "black", shape = 19)+
+  scale_y_continuous(breaks=seq(0.0,9,3),limits = c(0.0,9), expand = c(0,0))+
+  #scale_fill_manual(values = c("#CC79A7","#E69F00"))+
+  labs(x="", fill ="")+
+  ylab(expression("Mussels " %.% collector^{-1} %.% day^{-1}))+
+  theme_classic()+
+  theme(axis.ticks = element_line(linewidth = 1.0),legend.position = c(.86, .91),
+    legend.text = element_text(size = 18),
+    axis.text.y = element_text(size = 20),
+    axis.title.y = element_text(size = 24), 
+    axis.text.x = element_text(size = 20),
+    axis.title.x = element_text(size = 24))
+Rec.site
+
+#ggsave("Rec.Fig.png", width = 12, height = 10, units = c("in"), dpi = 600)
+```
+
+###############################
+# Figure Field Density
+###############################
+```{r}
+###########
+# averages
+###########
+Dens.Sum<-summarySE(Field_Density_Data_For_R_2019, measurevar = "Density", groupvars = c("Predator","Site"))
+Dens.Sum$Site=factor(Dens.Sum$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+Dens.Sum$Predator=factor(Dens.Sum$Predator, levels = c("Sea star","Crab"), ordered = TRUE)
+
+Den<-ggplot(Dens.Sum, aes(x=Site, y = Density, fill = Predator))+
+  #geom_bar(stat = "summary",fun = "mean", color = "black", size = 1, position = position_dodge())+
+  geom_errorbar(aes(ymin=Density-se, ymax=Density+se), width =0,size = 0.8, position = position_dodge(0.25), color = "grey40")+
+  geom_point(size = 7, shape = 21, position = position_dodge(0.25))+
+  scale_fill_manual(values = c("#CC79A7","#E69F00"), labels = c(expression(italic(Pisaster),"Rock crabs")))+
+  labs(x="", fill ="Predators")+
+  scale_y_continuous(expand = c(0,0), breaks=seq(0.0,0.3,0.1,),limits = c(0.0,0.3))+
+  ylab(expression(paste("Predators " %.% m^-2, sep = "")))+
+  theme_classic()+
+  #border(size = 1.3)+
+  theme(axis.ticks = element_line(size = 1.0), legend.position = c(.86,.91))+
+  My_Theme
+
+Den
+
+#ggsave("Density.Fig.png", width = 12, height = 12, units = c("in"), dpi = 600)
+
+###########
+# boxplots
+###########
+Field_Density_Data_For_R_2019$Site=factor(Field_Density_Data_For_R_2019$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+Field_Density_Data_For_R_2019$Predator=factor(Field_Density_Data_For_R_2019$Predator, levels = c("Sea star","Crab"), ordered = TRUE)
+
+
+Den <- ggplot(
+  Field_Density_Data_For_R_2019,
+  aes(x = Site, y = Density, fill = Predator)) +
+  geom_boxplot(
+    width = 0.65,
+    alpha = 0.8,
+    outlier.shape = NA,
+    position = position_dodge(width = 0.75),
+    color = "black") +
+  scale_fill_manual(
+    values = c("#CC79A7", "#E69F00"),
+    labels = c(expression(italic(Pisaster)), "Rock crabs")) +
+  scale_shape_manual(values = c(24, 21)) +
+  labs(x = "", fill="") +
+  scale_y_continuous(
+    expand = c(0, 0),
+    breaks = seq(0.0, 0.3, 0.1),
+    limits = c(0.0, 0.3)) +
+  ylab(expression(paste("Predators " %.% m^-2, sep = ""))) +
+  theme_classic() +
+  theme(axis.ticks = element_line(linewidth = 1.0),legend.position = c(.83, .93),
+    legend.text = element_text(size = 18),
+    axis.text.y = element_text(size = 20),
+    axis.title.y = element_text(size = 24), 
+    axis.text.x = element_text(size = 20),
+    axis.title.x = element_text(size = 24))
+
+Den
+```
+
+# Merge recruitment and density
+```{r}
+# Add tags to individual plots
+Rec.or <- Rec.or + labs(tag = "A") +
+  theme(
+    plot.tag = element_text(size = 24)  # adjust tag style
+  )
+
+Rec.site <- Rec.site + 
+  labs(tag = "B") +
+  theme(
+    plot.tag = element_text(size = 24),
+    axis.title.y = element_blank(),
+    axis.text.y  = element_text(color = "white")
+  )
+
+Den <- Den + labs(tag = "C") +
+  theme(
+    plot.tag = element_text(size = 24)
+  )
+
+# Add vertical spacer
+spacer <- ggdraw() + theme_void()
+
+# Combine plots with shared legend on top
+RecDen_cow <- plot_grid(
+  plot_grid(
+    Rec.or,
+    Rec.site,
+    Den,
+    ncol = 3,
+    rel_heights = c(1, 0.2, 1)              # adjust spacer height
+  ),
+  ncol = 1,
+  rel_heights = c(0.1, 1)                    # legend relative height
+)
+
+# Display combined figure
+RecDen_cow
+```
+
+# Proportion Survival
+```{r}
+Field.Sum<-summarySE(Field_Consumption_Data_2019, measurevar = "Proportion.Living", groupvars = c("Site","Treatment.C","Treatment.S","Group"))
+head(Field.Sum)
+
+# Factorize site
+Field.Sum$Site=factor(Field.Sum$Site, levels = c("Point St. George","Devil's Gate","Belinda Point"), ordered = TRUE)
+
+#Subset data
+PSG<-Field.Sum[9:12,]
+DG<-Field.Sum[5:8,]
+BP<-Field.Sum[1:4,]
+
+# Point St. George figure
+# Note: all mussels survive in control treatments, so there is no error bar for -crab, -star
+PSG.Fig<-ggplot(data = PSG, 
+               aes(x=`Treatment.S`, 
+                   y=`Proportion.Living`, 
+                   group = `Treatment.C`,
+                   fill = `Treatment.C`))+
+  geom_errorbar(aes(ymin=Proportion.Living-se, ymax=Proportion.Living+se),
+                color = "grey40", 
+                width =0,size = 0.8, 
+                position = position_dodge(.9))+
+geom_point(aes(fill = interaction(Treatment.C, Treatment.S)),
+           size = 5,
+           shape = 21,
+           color = "black",
+           stroke = 1,
+           position = position_dodge(.9)) +
+scale_fill_manual(values = c(
+  "- Rock crabs.- Pisaster" = "white",
+  "+ Rock crabs.- Pisaster" = "#E69F00",
+  "- Rock crabs.+ Pisaster" = "#CC79A7",
+  "+ Rock crabs.+ Pisaster" = "#009E73"
+))+
+scale_fill_manual(
+  values = c(
+    "- Rock crabs.- Pisaster" = "white",
+    "+ Rock crabs.- Pisaster" = "#E69F00",
+    "- Rock crabs.+ Pisaster" = "#CC79A7",
+    "+ Rock crabs.+ Pisaster" = "#009E73"
+  ),
+  labels = c(
+    "- Rock crabs.- Pisaster" = "Predators absent",
+    "+ Rock crabs.- Pisaster" = "Rock crabs",
+    "- Rock crabs.+ Pisaster" = expression(italic(Pisaster)),
+    "+ Rock crabs.+ Pisaster" = expression(italic(Pisaster)~"+ Rock crabs")
+  )
+)+
+
+scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
+                     limits = c(0.0,1.0))+
+  labs(x="",
+       y="Proportion of live mussels", 
+       group = "Predator", 
+       fill = "")+
+  theme_classic()+
+  ggtitle("Point St. George")+
+  theme(title = element_text(size = 24, color = "black"), 
+        axis.tick.x = element_blank(), 
+        legend.position = "right",
+        legend.text = element_text(color = "black",size = 20),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,size = 26),
+        axis.text.x = element_blank(),
+        axis.title.y = element_text(),
+        axis.text.y = element_text(color = "black", size = 20),
+        axis.title.y.left = element_text(color = "black",size = 24),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5))
+  
+PSG.Fig
+
+#ggsave("PSG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+
+# Devils gate figure
+# No mussels died in the control plots so no measure of error for -crab, -star treatments
+DG.Fig<-ggplot(data = DG, 
+               aes(x=`Treatment.S`, 
+                   y=`Proportion.Living`, 
+                   group = `Treatment.C`,
+                   fill = `Treatment.C`))+
+  geom_errorbar(aes(ymin=Proportion.Living-se, 
+                    ymax=Proportion.Living+se),
+                color = "grey40", 
+                width =0,
+                size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, 
+            color = "grey40")+
+  geom_point(aes(color = Treatment.C), 
+             size=5,
+             shape=21,
+             color = "black",
+             stroke = 1)+
+  scale_fill_manual(values = c("white","#E69F00"))+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
+                     limits = c(0.0,1.0))+
+  labs(x="",
+       y="", 
+       group = "Predator")+
+  theme_classic()+
+  ggtitle("Devil's Gate")+
+  theme(title = element_text(size = 24, color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "bottom",
+        legend.text = element_text(color = "black",size = 20),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,size = 26),
+        axis.text.x = element_text(color = "black", size = 20),
+        axis.title.y = element_text(),
+        axis.text.y = element_text(color = "black", size = 20),
+        axis.title.y.left = element_text(color = "black",size = 24),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5))
+
+DG.Fig
+
+#ggsave("DG.Survival.Fig.png", width = 7.5, height = 7, units = c("in"), dpi = 600)
+
+
+BP.Fig<-ggplot(data = BP, 
+               aes(x=`Treatment.S`, 
+                   y=`Proportion.Living`, 
+                   group = `Treatment.C`,
+                   fill = `Treatment.C`))+
+  geom_errorbar(aes(ymin=Proportion.Living-se, 
+                    ymax=Proportion.Living+se),
+                color = "grey40", 
+                width =0,
+                size = 0.8, 
+                position = position_dodge(0.0))+
+  geom_line(aes(color=Treatment.C), 
+            size = 1.0, color = "grey40")+
+  geom_point(aes(color = Treatment.C), 
+             size=5,
+             shape=21,
+             color = "black",
+             stroke = 1)+
+  scale_fill_manual(values = c("white","#E69F00"))+
+  scale_x_discrete(labels=expression("- "~italic(Pisaster),
+                                     "+ "~italic(Pisaster)))+
+  scale_y_continuous(breaks=seq(0.0,1.0,0.5,),
+                     limits = c(0.0,1.0))+
+  labs(x="",
+       y="", 
+       group = "Predator")+
+  theme_classic()+
+  ggtitle("Belinda Point")+
+  theme(title = element_text(size = 24, color = "black"), 
+        axis.ticks = element_line(size = 1.0), 
+        legend.position = "bottom",
+        legend.text = element_text(color = "black",size = 20),
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5,size = 26),
+        axis.text.x = element_text(color = "black", size = 20),
+        axis.title.y = element_text(),
+        axis.text.y = element_text(color = "black", size = 20),
+        axis.title.y.left = element_text(color = "black",size = 24),
+        panel.border = element_rect(colour = "black", fill = NA, linewidth = 0.5))
+
+BP.Fig
+
+# Now arrange with common legend
+pred.fig <-
+ggarrange(PSG.Fig, DG.Fig, BP.Fig, common.legend = TRUE, ncol = 3, nrow = 1);pred.fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Create interaction factor
+PSG$Treatment_combo <- interaction(
+  PSG$Treatment.C,
+  PSG$Treatment.S,
+  sep = " "
+)
+
+# FIXED color map (MATCHES YOUR REAL LEVELS)
+cols <- c(
+  "- Rock crabs - Pisaster" = "white",
+  "- Rock crabs + Pisaster" = "#CC79A7",
+  "+ Rock crabs - Pisaster" = "#E69F00",
+  "+ Rock crabs + Pisaster" = "#009E73"
+)
+
+# Plot
+PSG.Fig <- ggplot(PSG,
+                   aes(x = Treatment.S,
+                       y = Proportion.Living,
+                       group = Treatment_combo)) +
+
+  geom_errorbar(aes(ymin = Proportion.Living - se,
+                    ymax = Proportion.Living + se),
+                color = "grey40",
+                width = 0,
+                size = 0.8) +
+
+  geom_line(aes(color = Treatment_combo),
+            size = 1.0) +
+
+  geom_point(aes(fill = Treatment_combo),
+             shape = 21,
+             size = 5,
+             color = "black",
+             stroke = 1) +
+
+  scale_fill_manual(values = cols, name = "Treatment") +
+  scale_color_manual(values = cols, name = "Treatment") +
+
+  theme(legend.position = "right")
+PSG.Fig
+
+
+
+
+summary_data<-summarySE(Mussel_Survival_Data, measurevar = "Proportion.Living", groupvars = c("Site","Treatments.All"))
+head(summary_data)
+
+
+pred.fig <-
+ggplot(Mussel_Survival_Data, aes(x = Treatments.All, y = Proportion.Living, fill = Treatments.All))+
+  geom_jitter(width = 0.2, height = 0, size = 3, alpha = 0.4, shape = 21)+
+  geom_errorbar(data = summary_data,
+                aes(ymin = Proportion.Living - se, ymax = Proportion.Living + se),
+                width = 0, size = 0.8, color = "grey40")+
+  geom_point(data = summary_data,
+             aes(y = Proportion.Living),
+             size = 5, shape = 21, color = "black", stroke = 1)+
+  scale_y_continuous(breaks = seq(0,1,0.25), limits = c(0,1))+
+  scale_x_discrete(limits = c("Control", "Pisaster", "Rock crabs", "Pisaster + Rock crabs"))+
+  scale_fill_manual(
+    values = c(
+      "Control" = "white",
+      "Rock crabs" = "#E69F00",
+      "Pisaster" = "#CC79A7",
+      "Pisaster + Rock crabs" = "#009E73"),
+    breaks = c("Control", "Pisaster", "Rock crabs", "Pisaster + Rock crabs"),
+    labels = c("Control",
+               expression(italic("Pisaster")),
+               "Rock crabs",
+               expression(italic("Pisaster") ~ "+ Rock crabs")))+
+  labs(x = "", y = "Proportion of living mussels", fill = "")+
+  facet_wrap(~Site)+
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 18),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y  = element_text(size = 20, color = "black"),
+    axis.title.y = element_text(size = 24),
+    axis.line.y = element_line(),
+    panel.background = element_blank(),
+    panel.grid = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(size = 24)); pred.fig
+```
+
 # Figures: PPIS and PCIS
 ```{r}
 
@@ -455,9 +866,9 @@ PCIS<- ggplot(ppis_long, aes(x = PCIS, y = Site, fill = Predator)) +
   scale_x_continuous(breaks = seq(0,6.0,1.5), limits = c(0,6.0), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
-      "Sea star" = "#66c2a5",  # green
-      "Crab" = "#fc8d62",      # orange
-      "Both" = "#8da0cb"       # purple
+      "Sea star" = "#CC79A7",  # green
+      "Crab" = "#E69F00",      # orange
+      "Both" = "#009E73"       # purple
     ),
     labels = c(
       "Sea star" = expression(italic(Pisaster)),
@@ -485,9 +896,9 @@ PPIS <- ggplot(ppis_long, aes(x = PPIS, y = Site, fill = Predator)) +
   scale_x_continuous(breaks = seq(0,1,0.2), limits = c(0,1), expand = c(0.1,0)) +
 scale_fill_manual(
     values = c(
-      "Sea star" = "#66c2a5",  # green
-      "Crab" = "#fc8d62",      # orange
-      "Both" = "#8da0cb"       # purple
+      "Sea star" = "#CC79A7",  # green
+      "Crab" = "#E69F00",      # orange
+      "Both" = "#009E73"       # purple
     ),
     labels = c(
       "Sea star" = expression(italic(Pisaster)),
@@ -550,3 +961,8 @@ interactions_cow
 
 ```
 
+```{r}
+RecDen_cow
+pred.fig
+interactions_cow
+```
