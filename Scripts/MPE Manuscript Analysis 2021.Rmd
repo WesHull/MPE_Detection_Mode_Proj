@@ -245,177 +245,166 @@ Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHul
   # PPIS = PPIS=(effect of predator on survival(effect size))×(predator abundance)
     # effect size  =  survival in the respective absent treatment - the survival in the predator treatment
 
-# -------------------------------------------------
 # 1. FULL FACTORIAL MODEL
-# -------------------------------------------------
-
-# binomial distribution
-mod_full <- glmmTMB(
-  cbind(Survived, 30 - Survived) ~ Site * Treatment.C * Treatment.S +
-    (1 | Site:Block),
-  family = binomial,
-  data = Mussel_Survival_Data
-)
-
-summary(mod_full)
-plot(simulateResiduals(mod_full))
-testDispersion(mod_full)
-
-# beta-binomial model
-mod_bb <- glmmTMB(
-  cbind(Survived, 30 - Survived) ~
-    Site * Treatment.C * Treatment.S +
-    (1 | Site:Block),
-  family = betabinomial(link = "logit"),
-  data = Mussel_Survival_Data
-)
-
-summary(mod_bb)
-plot(simulateResiduals(mod_bb))
-
-
-# -------------------------------------------------
-# 2. MODEL SIMPLIFICATION
-# -------------------------------------------------
-
-mod2 <- update(mod_bb, . ~ . - Site:Treatment.C:Treatment.S)
-mod3 <- update(mod2, . ~ . - Site:Treatment.S)
-mod4 <- update(mod3, . ~ . - Site:Treatment.C)
-
-# =================================================
-# Pairwise LRT
-# =================================================
-anova(mod_bb, mod2)
-
-Anova(mod2, type = "II")
-
-# Strong spatial heterogeneity (Site dominates system)
-# Crabs are the dominant predator effect
-# Sea stars are weak / inconsistent
-# No predator synergy
-# Crab effects vary by site (context dependence)
-
-
-
-# =================================================
-# 1. Estimated marginal means (response scale)
-# =================================================
-emm <- emmeans(
-  mod_bb,
-  ~ Treatment.C * Treatment.S | Site,
-  type = "response"
-)
-
-emm_df <- as.data.frame(emm)
-
-# =================================================
-# 2. Extract treatment means + SE (aligned)
-# =================================================
-ppis <- emm_df %>%
-  select(Site, Treatment.C, Treatment.S, prob, SE) %>%
-  mutate(Group = case_when(
-    Treatment.C == "Absent"  & Treatment.S == "Absent"  ~ "control",
-    Treatment.C == "Present" & Treatment.S == "Absent"  ~ "crab",
-    Treatment.C == "Absent"  & Treatment.S == "Present" ~ "star",
-    Treatment.C == "Present" & Treatment.S == "Present" ~ "both"
-  )) %>%
-  select(Site, Group, prob, SE) %>%
-  tidyr::pivot_wider(
-    names_from = Group,
-    values_from = c(prob, SE)
-  )
-
-# =================================================
-# 3. Compute PPIS effects + SE propagation
-# =================================================
-ppis <- ppis %>%
-  mutate(
-    PPIS_crab = prob_control - prob_crab,
-    PPIS_star = prob_control - prob_star,
-    PPIS_both = prob_control - prob_both,
-
-    SE_crab = sqrt(SE_control^2 + SE_crab^2),
-    SE_star = sqrt(SE_control^2 + SE_star^2),
-    SE_both = sqrt(SE_control^2 + SE_both^2)
-  )
-
-# =================================================
-# 4. Reshape to long format (SAFE + aligned)
-# =================================================
-ppis_long <- ppis %>%
-  select(
-    Site,
-    PPIS_crab, PPIS_star, PPIS_both,
-    SE_crab, SE_star, SE_both
-  ) %>%
-  tidyr::pivot_longer(
-    cols = starts_with("PPIS_"),
-    names_to = "Predator",
-    values_to = "PPIS"
-  ) %>%
-  mutate(
-    SE = case_when(
-      Predator == "PPIS_crab" ~ SE_crab,
-      Predator == "PPIS_star" ~ SE_star,
-      Predator == "PPIS_both" ~ SE_both
-    ),
-    Predator = dplyr::recode(
-      Predator,
-      PPIS_crab = "Crab",
-      PPIS_star = "Sea star",
-      PPIS_both = "Both"
+  # convert predator treatment and site to factors
+  Mussel_Survival_Data_No_Control <- Mussel_Survival_Data_No_Control %>%
+    mutate(
+      Site = factor(Site),
+      Treatments.All = factor(Treatments.All),
+      Block = factor(Block),
+      Site.Block = interaction(Site, Block)
     )
-  ) %>%
-  select(Site, Predator, PPIS, SE)
 
-ppis_long <- ppis_long %>%
-  mutate(
-    PPIS_lower = PPIS - 1.96 * SE,
-    PPIS_upper = PPIS + 1.96 * SE
+  # binomial distribution
+  mod_full <- glmmTMB(
+    cbind(Survived, 30 - Survived) ~ Site * Treatments.All +
+      (1 | Site:Block),
+    family = binomial,
+    data = Mussel_Survival_Data_No_Control
   )
+  
+  summary(mod_full)
+  plot(simulateResiduals(mod_full))
+  testDispersion(mod_full)
+  
+  # beta-binomial model
+  mod_bb <- glmmTMB(
+    cbind(Survived, 30 - Survived) ~
+      Site * Treatments.All +
+      (1 | Site:Block),
+    family = betabinomial(link = "logit"),
+    data = Mussel_Survival_Data_No_Control
+  )
+  
+  Anova(mod_bb, type = "II")
+    
+    summary(mod_bb)
+    plot(simulateResiduals(mod_bb))
+  
+    # Strong spatial heterogeneity (Site dominates system)
+    # Crabs are the dominant predator effect
+    # Sea stars are weak / inconsistent
+    # No predator synergy
+    # Crab effects vary by site (context dependence)
+  
+  # Post-hoc comparison
+  # Treatment differences within each site
+  pairs(emmeans(mod_bb, ~ Treatments.All | Site, type = "response"))
+  
+  # Site differences within each treatment
+  pairs(emmeans(mod_bb, ~ Site | Treatments.All, type = "response"))
+    
+    
+# 1. EMMs from new model
+  emm <- emmeans(
+    mod_bb,
+    ~ Treatments.All | Site,
+    type = "response"
+  )
+  
+  emm_df <- as.data.frame(emm)
 
-# =================================================
+# 2. Extract treatment means + SE
+  # have to add back in the control survival values
+  ppis <- emm_df %>%
+    select(Site, Treatments.All, prob, SE) %>%
+    mutate(Group = case_when(
+      Treatments.All == "Rock crabs"            ~ "crab",
+      Treatments.All == "Pisaster"              ~ "star",
+      Treatments.All == "Pisaster + Rock crabs" ~ "both"
+    )) %>%
+    select(Site, Group, prob, SE) %>%
+    tidyr::pivot_wider(
+      names_from = Group,
+      values_from = c(prob, SE)
+    ) %>%
+    mutate(
+      prob_control = 1.0,
+      SE_control = 0.0
+    )
+
+# 3. Compute PPIS effects + SE propagation
+  ppis <- ppis %>%
+    mutate(
+      PPIS_crab = prob_control - prob_crab,
+      PPIS_star = prob_control - prob_star,
+      PPIS_both = prob_control - prob_both,
+      SE_crab = sqrt(SE_control^2 + SE_crab^2),
+      SE_star = sqrt(SE_control^2 + SE_star^2),
+      SE_both = sqrt(SE_control^2 + SE_both^2)
+    )
+  
+# 4. Reshape to long format (SAFE + aligned)
+  ppis_long <- ppis %>%
+    select(
+      Site,
+      PPIS_crab, PPIS_star, PPIS_both,
+      SE_crab, SE_star, SE_both
+    ) %>%
+    tidyr::pivot_longer(
+      cols = starts_with("PPIS_"),
+      names_to = "Predator",
+      values_to = "PPIS"
+    ) %>%
+    mutate(
+      SE = case_when(
+        Predator == "PPIS_crab" ~ SE_crab,
+        Predator == "PPIS_star" ~ SE_star,
+        Predator == "PPIS_both" ~ SE_both
+      ),
+      Predator = dplyr::recode(
+        Predator,
+        PPIS_crab = "Crab",
+        PPIS_star = "Sea star",
+        PPIS_both = "Both"
+      )
+    ) %>%
+    select(Site, Predator, PPIS, SE)
+  
+  ppis_long <- ppis_long %>%
+    mutate(
+      PPIS_lower = PPIS - 1.96 * SE,
+      PPIS_upper = PPIS + 1.96 * SE
+    )
+  
 # 5. Field predator densities (site means)
-# =================================================
-density_site <- Field_Density_Data_For_R_2019 %>%
-  dplyr::group_by(Site, Predator) %>%
-  dplyr::summarise(
-    density = mean(Density, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# combined predator density ("Both")
-density_both <- density_site %>%
-  dplyr::group_by(Site) %>%
-  dplyr::summarise(
-    density = sum(density),
-    .groups = "drop"
-  ) %>%
-  dplyr::mutate(Predator = "Both")
-
-density_all <- dplyr::bind_rows(density_site, density_both)
-
-# =================================================
+  density_site <- Field_Density_Data_For_R_2019 %>%
+    dplyr::group_by(Site, Predator) %>%
+    dplyr::summarise(
+      density = mean(Density, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  # combined predator density ("Both")
+  density_both <- density_site %>%
+    dplyr::group_by(Site) %>%
+    dplyr::summarise(
+      density = sum(density),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(Predator = "Both")
+  
+  density_all <- dplyr::bind_rows(density_site, density_both)
+  
 # 6. Merge PPIS + density
-# =================================================
-ppis_long <- ppis_long %>%
-  left_join(density_all, by = c("Site", "Predator"))
 
-# =================================================
+  ppis_long$Site <- factor(ppis_long$Site, ordered = FALSE)
+  density_all$Site <- factor(density_all$Site, ordered = FALSE)
+  
+  ppis_long <- ppis_long %>%
+    left_join(density_all, by = c("Site", "Predator"))
+  
 # 7. Compute PCIS + uncertainty
-# =================================================
-ppis_long <- ppis_long %>%
-  mutate(
-    PCIS = PPIS / density,
-    SE_PCIS = SE / density,
-    PCIS_lower = PCIS - 1.96 * SE_PCIS,
-    PCIS_upper = PCIS + 1.96 * SE_PCIS
-  )
-
-# =================================================
+  ppis_long <- ppis_long %>%
+    mutate(
+      PCIS = PPIS / density,
+      SE_PCIS = SE / density,
+      PCIS_lower = PCIS - 1.96 * SE_PCIS,
+      PCIS_upper = PCIS + 1.96 * SE_PCIS
+    )
+  
 # 8. Final output
-# =================================================
-ppis_long
+  ppis_long
 
 ```
 
@@ -466,9 +455,8 @@ Rec.site
 #ggsave("Rec.Fig.png", width = 12, height = 10, units = c("in"), dpi = 600)
 ```
 
-###############################
+
 # Figure Field Density
-###############################
 ```{r}
 ###########
 # averages
@@ -985,14 +973,15 @@ interactions_cow
 
 ```
 
+# Final figures
 ```{r}
 RecDen_cow
-ggsave("RecDen_cow.tiff", width = 7, height = 7, units = c("in"), dpi = 600)
+ggsave("Outputs/RecDen_cow.tiff", width = 7, height = 7, units = c("in"), dpi = 300)
 
 pred.fig
-ggsave("pred.fig.tiff", width = 6, height = 6, units = c("in"), dpi = 600)
+ggsave("Outputs/pred.fig.tiff", width = 6, height = 6, units = c("in"), dpi = 300)
 
 interactions_cow
-ggsave("interactions_cow.tiff", width = 6, height = 6, units = c("in"), dpi = 600)
+ggsave("Outputs/interactions_cow.tiff", width = 6, height = 6, units = c("in"), dpi = 300)
 
 ```
