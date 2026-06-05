@@ -25,6 +25,7 @@ library(car)
 library(cowplot)
 library(dplyr)
 library(emmeans)
+library(patchwork)
 ```
 
 ## Data Files Needed in Analysis 
@@ -45,6 +46,7 @@ Field_Density_Data_For_R_2019 <- read_csv("https://raw.githubusercontent.com/Wes
 Mussel_Survival_Data <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Mussel.Survival.Data.csv")
 Pisaster_Measurements_All_2015 <-read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Pisaster.Measurements.All.2015.csv")
 Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Crab.Meausrements.All.2015.csv")
+Lab_Consumption_Data_2021 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Lab_Consumption_Data_2021.csv")
 ```
 
 # RECRUITMENT ANALYSIS 
@@ -239,7 +241,7 @@ Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHul
 
 
 
-# model selection, PCIS and PPIS
+# Mussel survival analysis and PCIS and PPIS 
 ```{r}
 # PPIS = total population level impact of each predator type per site
   # PPIS = PPIS=(effect of predator on survival(effect size))×(predator abundance)
@@ -831,7 +833,7 @@ ggplot(Mussel_Survival_Data, aes(x = Treatments.All, y = Proportion.Living, fill
                 width = 0, size = 0.8, color = "grey40")+
   geom_point(data = summary_data,
              aes(y = Proportion.Living),
-             size = 4, shape = 21, color = "black", stroke = 1)+
+             size = 4, shape = 21, color = "black", stroke = .5)+
   scale_y_continuous(breaks = seq(0,1,0.25), limits = c(0,1))+
   scale_x_discrete(limits = c("Control", "Pisaster", "Rock crabs", "Pisaster + Rock crabs"))+
   scale_fill_manual(
@@ -973,6 +975,77 @@ interactions_cow
 
 ```
 
+# Laboratory figures
+```{r}
+
+# summary stats
+summ_feeding<-summarySE(Lab_Consumption_Data_2021, measurevar = "Tot.Consumed.Pred.Day", groupvars = c("Treatment"))
+
+# split summary stas by predator
+Star.Lab.Con<-summ_feeding[4:6,]
+Crab.Lab.Con<-summ_feeding[1:3,]
+
+# separate raw by predator
+P.feeding.data <- Lab_Consumption_Data_2021[1:15,]
+C.feeding.data <- Lab_Consumption_Data_2021[16:30,]
+
+
+
+# pisaster figure
+P.feeding <-
+  ggplot(Star.Lab.Con, aes(x=Treatment, y = Tot.Consumed.Pred.Day))+
+  geom_bar(stat = "summary",fun = "mean", color = "black", fill = "white", position = position_dodge())+
+  geom_errorbar(aes(ymin=Tot.Consumed.Pred.Day-se, ymax=Tot.Consumed.Pred.Day+se), width = 0, position = position_dodge(0.9))+
+  labs(x="", fill ="Treatment")+
+  scale_y_continuous(expand = c(0,0),breaks=seq(0.0,10.0,2.0,),limits = c(0.0,10.0))+
+  ylab(expression(paste("Mussels consumed · ", individual^-1," · ",day^-1,"", sep = "")))+
+  theme_classic()+
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  );P.feeding
+  
+
+C.feeding <-
+  ggplot(Crab.Lab.Con, aes(x=Treatment, y = Tot.Consumed.Pred.Day))+
+  geom_bar(stat = "summary",fun = "mean", color = "black", fill = "white", position = position_dodge())+
+  geom_errorbar(aes(ymin=Tot.Consumed.Pred.Day-se, ymax=Tot.Consumed.Pred.Day+se), width = 0, position = position_dodge(0.9))+
+  labs(x="", fill ="Treatment")+
+  scale_y_continuous(expand = c(0,0),breaks=seq(0.0,10.0,2.0,),limits = c(0.0,10.0))+
+  scale_x_discrete(labels = c(
+  "Pisaster absent" = expression(italic("Pisaster")~"absent"),
+  "Pisaster cue" = expression(italic("Pisaster")~"cue"),
+  "Pisaster present" = expression(italic("Pisaster")~"present")))+
+  ylab(expression(paste("Mussels consumed · ", individual^-1," · ",day^-1,"", sep = "")))+
+  theme_classic()+
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(color = "white"),
+    axis.title.y = element_text(color = "white")
+  );C.feeding
+
+
+# Combine both figures
+
+P.feeding <- P.feeding + labs(tag = "A")
+C.feeding <- C.feeding + labs(tag = "B")
+
+
+Lab.feeding.fig <-
+plot_grid(
+    P.feeding,
+    C.feeding,
+    ncol = 2)
+
+# Display combined figure
+Lab.feeding.fig
+```
+
+
+
 # Final figures
 ```{r}
 RecDen_cow
@@ -983,5 +1056,8 @@ ggsave("Outputs/pred.fig.tiff", width = 6, height = 6, units = c("in"), dpi = 30
 
 interactions_cow
 ggsave("Outputs/interactions_cow.tiff", width = 6, height = 6, units = c("in"), dpi = 300)
+
+Lab.feeding.fig
+ggsave("Outputs/Lab,feeding.fig.tiff", width = 6, height = 6, units = c("in"), dpi = 300)
 
 ```
