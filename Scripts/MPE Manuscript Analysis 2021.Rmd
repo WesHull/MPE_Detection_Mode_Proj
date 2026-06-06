@@ -41,12 +41,12 @@ library(patchwork)
   Crab.Measurements.All.2015
   
 ```{r, echo=FALSE}
-Recruitment_data_for_R_2020 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Recruitment%20data%20for%20R%202020.csv")
-Field_Density_Data_For_R_2019 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Field%20Density%20Data%20For%20R%202019.csv")
-Mussel_Survival_Data <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Mussel.Survival.Data.csv")
-Pisaster_Measurements_All_2015 <-read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Pisaster.Measurements.All.2015.csv")
-Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Crab.Meausrements.All.2015.csv")
-Lab_Consumption_Data_2021 <- read_csv("https://raw.githubusercontent.com/WesHull/MPE_Detection_Mode_Proj/refs/heads/main/Data/Lab_Consumption_Data_2021.csv")
+Recruitment_data_for_R_2020 <- read_csv("https://raw.githubusercontent.com/WesHull/Hull_and_Bourdeau_2026_Proj/refs/heads/main/Data/Recruitment%20data%20for%20R%202020.csv")
+Field_Density_Data_For_R_2019 <- read_csv("https://raw.githubusercontent.com/WesHull/Hull_and_Bourdeau_2026_Proj/refs/heads/main/Data/Field%20Density%20Data%20For%20R%202019.csv")
+Mussel_Survival_Data <- read_csv("https://raw.githubusercontent.com/WesHull/Hull_and_Bourdeau_2026_Proj/refs/heads/main/Data/Mussel.Survival.Data.csv")
+Pisaster_Measurements_All_2015 <-read_csv("https://raw.githubusercontent.com/WesHull/Hull_and_Bourdeau_2026_Proj/refs/heads/main/Data/Pisaster.Measurements.All.2015.csv")
+Crab_Meausrements_All_2015 <- read_csv("https://raw.githubusercontent.com/WesHull/Hull_and_Bourdeau_2026_Proj/refs/heads/main/Data/Crab.Meausrements.All.2015.csv")
+Lab_Consumption_Data_2021 <- read_csv("https://raw.githubusercontent.com/WesHull/Hull_and_Bourdeau_2026_Proj/refs/heads/main/Data/Lab_Consumption_Data_2021.csv")
 ```
 
 # RECRUITMENT ANALYSIS 
@@ -396,7 +396,7 @@ Lab_Consumption_Data_2021 <- read_csv("https://raw.githubusercontent.com/WesHull
   ppis_long <- ppis_long %>%
     left_join(density_all, by = c("Site", "Predator"))
   
-# 7. Compute PCIS + uncertainty
+# 7. Compute PCIS + uncertainty (95%CIs)
   ppis_long <- ppis_long %>%
     mutate(
       PCIS = PPIS / density,
